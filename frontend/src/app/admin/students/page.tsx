@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { adminAPI } from '@/lib/api';
 import toast from 'react-hot-toast';
 import { useDropzone } from 'react-dropzone';
-import { Upload, Search, Users, CheckCircle, XCircle, ChevronLeft, ChevronRight, Unlock, RefreshCw, Trash2 } from 'lucide-react';
+import { Upload, Search, Users, CheckCircle, XCircle, ChevronLeft, ChevronRight, Unlock, RefreshCw, Trash2, UserCheck, Phone, X } from 'lucide-react';
 import AdminLayout from '@/components/AdminLayout';
 
 export default function AdminStudentsPage() {
@@ -23,6 +23,9 @@ export default function AdminStudentsPage() {
   const selectedElectionRef = useRef('');
   const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
   const [confirmDeleteStudent, setConfirmDeleteStudent] = useState<any>(null);
+  const [confirmApprove, setConfirmApprove] = useState<any>(null);
+  const [editContact, setEditContact] = useState<any>(null);
+  const [contactForm, setContactForm] = useState({ phoneNumber: '', schoolEmail: '', resendOTP: true });
 
   useEffect(() => {
     adminAPI.getElections().then(({ data }) => {
@@ -118,6 +121,32 @@ export default function AdminStudentsPage() {
       loadStudents();
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Failed to delete students');
+    }
+  };
+
+  const manualApprove = async (student: any) => {
+    try {
+      await adminAPI.manualApproveStudent(student.id);
+      toast.success(`${student.full_name} approved — they can now vote`);
+      setConfirmApprove(null);
+      loadStudents();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to approve student');
+    }
+  };
+
+  const updateContact = async () => {
+    if (!contactForm.phoneNumber && !contactForm.schoolEmail) {
+      return toast.error('Enter at least a phone number or email');
+    }
+    try {
+      const { data } = await adminAPI.updateStudentContact(editContact.id, contactForm);
+      toast.success(data.message);
+      setEditContact(null);
+      setContactForm({ phoneNumber: '', schoolEmail: '', resendOTP: true });
+      loadStudents();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to update contact');
     }
   };
 
@@ -319,7 +348,31 @@ export default function AdminStudentsPage() {
                       : <span className="text-xs text-dark-700">Active</span>}
                   </td>
                   <td>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 flex-wrap">
+                      {/* Approve manually — only for unverified students */}
+                      {!s.is_verified && (
+                        <button
+                          onClick={() => setConfirmApprove(s)}
+                          className="p-1.5 hover:text-white transition-colors rounded-lg hover:bg-dark-400"
+                          style={{ color: '#00ff88' }}
+                          title="Manually approve (bypass OTP)"
+                        >
+                          <UserCheck className="w-4 h-4" />
+                        </button>
+                      )}
+                      {/* Edit contact — for unverified students */}
+                      {!s.is_verified && (
+                        <button
+                          onClick={() => {
+                            setEditContact(s);
+                            setContactForm({ phoneNumber: s.phone_number || '', schoolEmail: s.school_email || '', resendOTP: true });
+                          }}
+                          className="p-1.5 text-yellow-400 hover:text-white transition-colors rounded-lg hover:bg-dark-400"
+                          title="Fix contact details & resend OTP"
+                        >
+                          <Phone className="w-4 h-4" />
+                        </button>
+                      )}
                       {s.account_locked && (
                         <button
                           onClick={() => unlockStudent(s.id)}
@@ -426,6 +479,99 @@ export default function AdminStudentsPage() {
               >
                 Yes, Remove
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manual Approve Modal */}
+      {confirmApprove && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/80" onClick={() => setConfirmApprove(null)} />
+          <div className="relative card-glow p-6 w-full max-w-sm text-center">
+            <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4"
+              style={{ background: 'rgba(0,255,136,0.1)', border: '1px solid rgba(0,255,136,0.3)' }}>
+              <UserCheck className="w-7 h-7 text-primary-500" />
+            </div>
+            <h3 className="font-bold text-white text-lg mb-2">Manually Approve Student?</h3>
+            <p className="text-sm text-white font-semibold mb-1">{confirmApprove.full_name}</p>
+            <p className="text-xs text-dark-700 mb-1">Ref: {confirmApprove.reference_number}</p>
+            <div className="rounded-xl p-3 mb-5 text-left"
+              style={{ background: 'rgba(255,170,0,0.08)', border: '1px solid rgba(255,170,0,0.2)' }}>
+              <p className="text-xs text-yellow-400 font-semibold mb-1">⚠️ Only do this if you have verified this student's identity in person.</p>
+              <p className="text-xs text-dark-700">This bypasses OTP verification and grants them immediate access to vote.</p>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmApprove(null)} className="btn-secondary flex-1">Cancel</button>
+              <button onClick={() => manualApprove(confirmApprove)} className="btn-primary flex-1">
+                Yes, Approve
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Update Contact Modal */}
+      {editContact && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/80" onClick={() => setEditContact(null)} />
+          <div className="relative card-glow p-6 w-full max-w-sm">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="font-bold text-white">Fix Contact Details</h3>
+              <button onClick={() => setEditContact(null)} className="p-1 text-dark-700 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-sm text-white font-semibold mb-1">{editContact.full_name}</p>
+            <p className="text-xs text-dark-700 mb-4">Ref: {editContact.reference_number}</p>
+
+            <div className="space-y-4">
+              <div>
+                <label className="label">Phone Number</label>
+                <input
+                  className="input"
+                  placeholder="e.g. 0244123456"
+                  value={contactForm.phoneNumber}
+                  onChange={e => setContactForm(f => ({ ...f, phoneNumber: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="label">School Email</label>
+                <input
+                  className="input"
+                  type="email"
+                  placeholder="e.g. student@stu.edu.gh"
+                  value={contactForm.schoolEmail}
+                  onChange={e => setContactForm(f => ({ ...f, schoolEmail: e.target.value }))}
+                />
+              </div>
+
+              {/* Resend OTP toggle */}
+              <div className="flex items-center gap-3 p-3 rounded-xl"
+                style={{ background: 'rgba(0,255,136,0.05)', border: '1px solid rgba(0,255,136,0.1)' }}>
+                <input
+                  type="checkbox"
+                  id="resendOTP"
+                  checked={contactForm.resendOTP}
+                  onChange={e => setContactForm(f => ({ ...f, resendOTP: e.target.checked }))}
+                  className="w-4 h-4 accent-primary-500"
+                />
+                <label htmlFor="resendOTP" className="text-sm text-white cursor-pointer">
+                  Resend OTP to new contact immediately
+                </label>
+              </div>
+
+              <p className="text-xs text-dark-700">
+                Student's verification will be reset. They will need to verify with the new contact details.
+              </p>
+
+              <div className="flex gap-3 pt-1">
+                <button onClick={() => setEditContact(null)} className="btn-secondary flex-1">Cancel</button>
+                <button onClick={updateContact} className="btn-primary flex-1">
+                  <Phone className="w-4 h-4" /> Update & {contactForm.resendOTP ? 'Resend OTP' : 'Save'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

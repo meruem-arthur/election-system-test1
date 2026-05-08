@@ -608,6 +608,101 @@ router.patch('/students/:id/reset-otp', requireRole('super_admin', 'election_adm
   res.json({ message: 'OTP verification reset. Student must re-verify.' });
 });
 
+// Manually approve a student (bypass OTP) — admin verified identity in person
+router.patch('/students/:id/approve', requireRole('super_admin', 'election_admin'), async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'UPDATE students SET is_verified = true WHERE id = $1 RETURNING id, full_name, reference_number',
+      [req.params.id]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Student not found' });
+
+    await auditService.log({
+      action: 'otp_verified',
+      actorType: 'admin',
+      actorId: req.admin.id,
+      actorEmail: req.admin.email,
+      metadata: {
+        action: 'manual_approval',
+        studentId: req.params.id,
+        studentName: rows[0].full_name,
+        approvedBy: req.admin.email
+      },
+      ip: req.ip
+    });
+
+    res.json({ message: `${rows[0].full_name} manually approved`, student: rows[0] });
+  } catch (err) {
+    logger.error('Manual approve error:', err);
+    res.status(500).json({ error: 'Failed to approve student' });
+  }
+});
+
+// Update student contact details (email / phone) — then optionally resend OTP
+router.patch('/students/:id/contact', requireRole('super_admin', 'election_admin'), async (req, res) => {
+  const { phoneNumber, schoolEmail } = req.body;
+  if (!phoneNumber && !schoolEmail) {
+    return res.status(400).json({ error: 'Provide at least a phone number or email' });
+  }
+
+  try {
+    // Build dynamic update
+    const updates = [];
+    const values = [];
+    let idx = 1;
+
+    if (schoolEmail !== undefined) {
+      updates.push(`school_email = $${idx++}`);
+      values.push(schoolEmail || null);
+    }
+    if (phoneNumber !== undefined) {
+      updates.push(`phone_number = $${idx++}`);
+      values.push(phoneNumber || null);
+    }
+    // Reset verification so they go through OTP with new contact
+    updates.push(`is_verified = false`);
+    values.push(req.params.id);
+
+    const { rows } = await pool.query(
+      `UPDATE students SET ${updates.join(', ')}, updated_at = NOW() WHERE id = $${idx} RETURNING *`,
+      values
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Student not found' });
+
+    await auditService.log({
+      action: 'otp_verified',
+      actorType: 'admin',
+      actorId: req.admin.id,
+      actorEmail: req.admin.email,
+      metadata: {
+        action: 'contact_updated',
+        studentId: req.params.id,
+        studentName: rows[0].full_name,
+        updatedBy: req.admin.email
+      },
+      ip: req.ip
+    });
+
+    // Optionally resend OTP with new contact
+    const { resendOTP } = req.body;
+    if (resendOTP) {
+      try {
+        const otpService = require('../services/otp');
+        await otpService.sendOTP(rows[0]);
+        return res.json({ message: 'Contact updated and OTP resent', student: rows[0], otpSent: true });
+      } catch (otpErr) {
+        logger.error('OTP resend after contact update failed:', otpErr);
+        return res.json({ message: 'Contact updated but OTP failed to send. Use console code.', student: rows[0], otpSent: false });
+      }
+    }
+
+    res.json({ message: 'Contact details updated. Student must verify again.', student: rows[0] });
+  } catch (err) {
+    logger.error('Update contact error:', err);
+    res.status(500).json({ error: 'Failed to update contact details' });
+  }
+});
+
 // Delete a single student
 router.delete('/students/:id', requireRole('super_admin', 'election_admin'), async (req, res) => {
   try {

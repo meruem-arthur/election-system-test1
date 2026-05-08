@@ -137,6 +137,12 @@ export const adminAPI = {
   unlockStudent: (studentId: string) =>
     api.patch(`/admin/students/${studentId}/unlock`),
 
+  manualApproveStudent: (studentId: string) =>
+    api.patch(`/admin/students/${studentId}/approve`),
+
+  updateStudentContact: (studentId: string, data: { phoneNumber?: string; schoolEmail?: string; resendOTP?: boolean }) =>
+    api.patch(`/admin/students/${studentId}/contact`, data),
+
   deleteStudent: (studentId: string) =>
     api.delete(`/admin/students/${studentId}`),
 
