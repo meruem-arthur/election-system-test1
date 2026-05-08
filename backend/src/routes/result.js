@@ -9,6 +9,17 @@ const logger = require('../utils/logger');
 // GET RESULTS (Admin always, Students only after publish)
 // ============================================================
 
+router.get('/published', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, title, department, academic_year, status, results_published_at
+       FROM elections WHERE status = 'results_published' ORDER BY results_published_at DESC`
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch published elections' });
+  }
+});
 router.get('/:electionId', async (req, res) => {
   const { electionId } = req.params;
   const token = req.headers.authorization?.replace('Bearer ', '');

@@ -155,6 +155,8 @@ export const adminAPI = {
 // ============================================================
 
 export const resultsAPI = {
+  getPublishedElections: () => api.get('/results/published'),
+
   getResults: (electionId: string) =>
     api.get(`/results/${electionId}`),
 

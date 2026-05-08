@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { resultsAPI, adminAPI } from '@/lib/api';
+import { resultsAPI } from '@/lib/api';
 import { Trophy, User, LogOut } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
