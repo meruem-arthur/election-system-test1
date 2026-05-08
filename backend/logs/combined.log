@@ -907,3 +907,9 @@
 {"level":"info","message":"✅ Database connected","timestamp":"2026-05-08T09:26:58.610Z"}
 {"level":"info","message":"🚀 Election System API running on port 5000","timestamp":"2026-05-08T09:26:58.651Z"}
 {"level":"info","message":"   Environment: development","timestamp":"2026-05-08T09:26:58.653Z"}
+{"level":"info","message":"✅ Database connected","timestamp":"2026-05-08T09:27:12.135Z"}
+{"level":"info","message":"🚀 Election System API running on port 5000","timestamp":"2026-05-08T09:27:12.200Z"}
+{"level":"info","message":"   Environment: development","timestamp":"2026-05-08T09:27:12.205Z"}
+{"level":"info","message":"✅ Database connected","timestamp":"2026-05-08T09:31:25.352Z"}
+{"level":"info","message":"🚀 Election System API running on port 5000","timestamp":"2026-05-08T09:31:25.381Z"}
+{"level":"info","message":"   Environment: development","timestamp":"2026-05-08T09:31:25.383Z"}
