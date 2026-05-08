@@ -120,19 +120,46 @@ export default function AdminResultsPage() {
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <p className="font-bold text-white">{c.fullName}</p>
-                            {c.isWinner && (
-                              <span className="badge badge-active text-xs">Winner</span>
+                            {c.isYesNoVote ? (
+                              <span className={`badge text-xs ${c.isWinner ? 'badge-active' : 'badge-ended'}`}>
+                                {c.isWinner ? 'ELECTED ✓' : 'NOT ELECTED ✗'}
+                              </span>
+                            ) : (
+                              c.isWinner && <span className="badge badge-active text-xs">Winner</span>
                             )}
                           </div>
                           <p className="text-xs text-dark-700">{c.program}</p>
-                          <div className="progress-bar mt-1.5">
-                            <div className="progress-fill" style={{ width: `${c.percentage}%` }} />
-                          </div>
+
+                          {/* YES/NO breakdown */}
+                          {c.isYesNoVote ? (
+                            <div className="mt-2 space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-primary-500 w-8">YES</span>
+                                <div className="flex-1 progress-bar h-2">
+                                  <div className="progress-fill" style={{ width: `${c.percentage}%` }} />
+                                </div>
+                                <span className="text-xs text-primary-500 font-mono w-16 text-right">{c.yesVotes} ({c.percentage}%)</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-red-400 w-8">NO</span>
+                                <div className="flex-1 progress-bar h-2">
+                                  <div className="h-full rounded-full" style={{ width: `${c.noPercentage}%`, background: '#ff4444' }} />
+                                </div>
+                                <span className="text-xs text-red-400 font-mono w-16 text-right">{c.noVotes} ({c.noPercentage}%)</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="progress-bar mt-1.5">
+                              <div className="progress-fill" style={{ width: `${c.percentage}%` }} />
+                            </div>
+                          )}
                         </div>
                         <div className="text-right flex-shrink-0">
-                          <p className="font-mono font-bold text-lg" style={{ color: '#00ff88' }}>{c.votes}</p>
+                          <p className="font-mono font-bold text-lg" style={{ color: '#00ff88' }}>
+                            {c.isYesNoVote ? c.yesVotes : c.votes}
+                          </p>
                           <p className="text-xs text-dark-700">{c.percentage}%</p>
                         </div>
                       </div>

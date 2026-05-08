@@ -163,12 +163,15 @@ router.post('/cast', authenticateStudent, requireVerified, async (req, res) => {
 
       // 4. Insert anonymous ballots (NO student_id, only cryptographic token)
       for (const vote of votes) {
-        // For NO votes, we still record the candidate but with a NO token prefix
         const voteMarker = vote.voteType === 'no' ? 'NO' : 'YES';
-        const ballotToken = voteMarker + '_' + crypto
+        // Encode vote type clearly in token: YES_<hash> or NO_<hash>
+        // Results query reads the prefix to count YES vs NO separately
+        const hashPart = crypto
           .createHmac('sha256', process.env.JWT_SECRET)
           .update(`${req.student.election_id}-${vote.positionId}-${vote.candidateId}-${voteMarker}-${Date.now()}-${crypto.randomBytes(16).toString('hex')}`)
           .digest('hex');
+
+        const ballotToken = `${voteMarker}_${hashPart}`;
 
         await client.query(
           'INSERT INTO ballots (election_id, position_id, candidate_id, ballot_token) VALUES ($1, $2, $3, $4)',

@@ -41,14 +41,18 @@ router.get('/:electionId', async (req, res) => {
         c.image_url,
         c.program,
         c.level,
-        COUNT(b.id)::integer as votes,
-        ROUND(COUNT(b.id) * 100.0 / NULLIF(SUM(COUNT(b.id)) OVER (PARTITION BY p.id), 0), 1) as percentage
+        COUNT(b.id)::integer as total_votes,
+        COUNT(b.id) FILTER (WHERE b.ballot_token NOT LIKE 'NO_%')::integer as yes_votes,
+        COUNT(b.id) FILTER (WHERE b.ballot_token LIKE 'NO_%')::integer as no_votes,
+        -- Count candidates in this position to detect yes/no positions
+        COUNT(DISTINCT c2.id) as position_candidate_count
       FROM positions p
       JOIN candidates c ON c.position_id = p.id AND c.election_id = p.election_id AND c.is_approved = true
+      LEFT JOIN candidates c2 ON c2.position_id = p.id AND c2.election_id = p.election_id AND c2.is_approved = true
       LEFT JOIN ballots b ON b.candidate_id = c.id AND b.election_id = p.election_id
       WHERE p.election_id = $1
       GROUP BY p.id, p.title, p.display_order, c.id, c.full_name, c.image_url, c.program, c.level
-      ORDER BY p.display_order, votes DESC
+      ORDER BY p.display_order, total_votes DESC
     `, [electionId]);
 
     const { rows: [stats] } = await pool.query(`
@@ -64,26 +68,58 @@ router.get('/:electionId', async (req, res) => {
           id: row.position_id,
           title: row.position,
           displayOrder: row.display_order,
+          isYesNoVote: parseInt(row.position_candidate_count) === 1,
           candidates: []
         };
       }
+
+      const isYesNoPosition = parseInt(row.position_candidate_count) === 1;
+
       positions[row.position_id].candidates.push({
         id: row.candidate_id,
         fullName: row.candidate,
         imageUrl: row.image_url,
         program: row.program,
         level: row.level,
-        votes: row.votes,
-        percentage: parseFloat(row.percentage) || 0,
-        isWinner: false
+        votes: isYesNoPosition ? row.yes_votes : row.total_votes,
+        yesVotes: row.yes_votes,
+        noVotes: row.no_votes,
+        totalVotes: row.total_votes,
+        isYesNoVote: isYesNoPosition,
+        percentage: 0,
+        isWinner: false,
+        isElected: false
       });
     }
 
-    // Mark winners
-    Object.values(positions).forEach(pos => {
-      if (pos.candidates.length > 0) {
-        const max = Math.max(...pos.candidates.map(c => c.votes));
-        pos.candidates[0].isWinner = pos.candidates[0].votes === max && max > 0;
+    // Mark winners correctly
+    Object.values(positions).forEach((pos) => {
+      if (pos.candidates.length === 0) return;
+
+      if (pos.isYesNoVote) {
+        // YES/NO position — winner only if YES > NO
+        const candidate = pos.candidates[0];
+        const totalCast = candidate.yesVotes + candidate.noVotes;
+        candidate.percentage = totalCast > 0
+          ? parseFloat(((candidate.yesVotes / totalCast) * 100).toFixed(1))
+          : 0;
+        candidate.noPercentage = totalCast > 0
+          ? parseFloat(((candidate.noVotes / totalCast) * 100).toFixed(1))
+          : 0;
+        // Only elected if YES votes strictly greater than NO votes
+        candidate.isWinner = candidate.yesVotes > candidate.noVotes && candidate.yesVotes > 0;
+        candidate.isElected = candidate.isWinner;
+        candidate.result = candidate.isWinner ? 'ELECTED' : 'NOT ELECTED';
+      } else {
+        // Normal multi-candidate position
+        const totalVotes = pos.candidates.reduce((sum, c) => sum + c.votes, 0);
+        const max = Math.max(...pos.candidates.map((c) => c.votes));
+        pos.candidates.forEach((c) => {
+          c.percentage = totalVotes > 0
+            ? parseFloat(((c.votes / totalVotes) * 100).toFixed(1))
+            : 0;
+          c.isWinner = c.votes === max && max > 0;
+        });
       }
     });
 
@@ -113,13 +149,18 @@ router.get('/:electionId/pdf', async (req, res) => {
   try {
     const { rows: [election] } = await pool.query('SELECT * FROM elections WHERE id = $1', [electionId]);
     const { rows: results } = await pool.query(`
-      SELECT p.title as position, c.full_name as candidate, COUNT(b.id) as votes
+      SELECT p.title as position, c.full_name as candidate,
+        COUNT(b.id) as total_votes,
+        COUNT(b.id) FILTER (WHERE b.ballot_token NOT LIKE 'NO_%') as yes_votes,
+        COUNT(b.id) FILTER (WHERE b.ballot_token LIKE 'NO_%') as no_votes,
+        COUNT(DISTINCT c2.id) as position_candidate_count
       FROM positions p
       JOIN candidates c ON c.position_id = p.id AND c.is_approved = true
+      LEFT JOIN candidates c2 ON c2.position_id = p.id AND c2.election_id = p.election_id AND c2.is_approved = true
       LEFT JOIN ballots b ON b.candidate_id = c.id
       WHERE p.election_id = $1
       GROUP BY p.title, c.full_name, p.display_order
-      ORDER BY p.display_order, votes DESC
+      ORDER BY p.display_order, yes_votes DESC
     `, [electionId]);
 
     const doc = new PDFDocument({ margin: 50 });
@@ -139,7 +180,15 @@ router.get('/:electionId/pdf', async (req, res) => {
         currentPosition = row.position;
         doc.fillColor('black');
       }
-      doc.fontSize(11).text(`  ${row.candidate} — ${row.votes} votes`);
+      const isYesNo = parseInt(row.position_candidate_count) === 1;
+      if (isYesNo) {
+        const elected = parseInt(row.yes_votes) > parseInt(row.no_votes);
+        doc.fontSize(11).text(
+          `  ${row.candidate} — YES: ${row.yes_votes} | NO: ${row.no_votes} — ${elected ? 'ELECTED ✓' : 'NOT ELECTED ✗'}`
+        );
+      } else {
+        doc.fontSize(11).text(`  ${row.candidate} — ${row.total_votes} votes`);
+      }
     }
 
     doc.end();

@@ -885,3 +885,25 @@
 {"ip":"::1","level":"info","message":"GET /api/admin/admins","timestamp":"2026-05-07T08:20:06.896Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"}
 {"ip":"::1","level":"info","message":"GET /api/admin/admins","timestamp":"2026-05-07T08:20:13.880Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"}
 {"ip":"::1","level":"info","message":"GET /api/admin/admins","timestamp":"2026-05-07T08:20:13.893Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"}
+{"level":"info","message":"✅ Database connected","timestamp":"2026-05-08T03:39:01.351Z"}
+{"level":"info","message":"🚀 Election System API running on port 5000","timestamp":"2026-05-08T03:39:01.378Z"}
+{"level":"info","message":"   Environment: development","timestamp":"2026-05-08T03:39:01.380Z"}
+{"ip":"::1","level":"info","message":"GET /api/vote/candidates","timestamp":"2026-05-08T03:44:45.589Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"}
+{"ip":"::1","level":"info","message":"GET /api/vote/candidates","timestamp":"2026-05-08T03:44:45.625Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"}
+{"ip":"::1","level":"info","message":"POST /api/auth/admin/login","timestamp":"2026-05-08T03:45:39.670Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"}
+{"ip":"::1","level":"info","message":"GET /api/admin/elections","timestamp":"2026-05-08T03:46:01.575Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"}
+{"ip":"::1","level":"info","message":"GET /api/admin/elections","timestamp":"2026-05-08T03:46:01.648Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"}
+{"ip":"::1","level":"info","message":"GET /api/admin/dashboard/6febc34b-9107-44d9-9064-52b40230e1bf","timestamp":"2026-05-08T03:46:01.743Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"}
+{"ip":"::1","level":"info","message":"GET /api/admin/elections","timestamp":"2026-05-08T03:46:14.828Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"}
+{"ip":"::1","level":"info","message":"GET /api/admin/elections","timestamp":"2026-05-08T03:46:14.886Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"}
+{"ip":"::1","level":"info","message":"GET /api/admin/elections/6febc34b-9107-44d9-9064-52b40230e1bf/students","timestamp":"2026-05-08T03:46:14.986Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"}
+{"ip":"::1","level":"info","message":"PATCH /api/admin/students/0f56d2dc-278e-4091-833f-938ea823a92c/approve","timestamp":"2026-05-08T03:46:35.505Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"}
+{"ip":"::1","level":"info","message":"GET /api/admin/elections/6febc34b-9107-44d9-9064-52b40230e1bf/students","timestamp":"2026-05-08T03:46:35.574Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"}
+{"ip":"::1","level":"info","message":"PATCH /api/admin/students/460a6d32-84bd-457d-b59c-83daf4a3a028/approve","timestamp":"2026-05-08T03:47:04.837Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"}
+{"ip":"::1","level":"info","message":"GET /api/admin/elections/6febc34b-9107-44d9-9064-52b40230e1bf/students","timestamp":"2026-05-08T03:47:04.878Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"}
+{"level":"info","message":"✅ Database connected","timestamp":"2026-05-08T09:13:10.309Z"}
+{"level":"info","message":"🚀 Election System API running on port 5000","timestamp":"2026-05-08T09:13:10.355Z"}
+{"level":"info","message":"   Environment: development","timestamp":"2026-05-08T09:13:10.358Z"}
+{"level":"info","message":"✅ Database connected","timestamp":"2026-05-08T09:26:58.610Z"}
+{"level":"info","message":"🚀 Election System API running on port 5000","timestamp":"2026-05-08T09:26:58.651Z"}
+{"level":"info","message":"   Environment: development","timestamp":"2026-05-08T09:26:58.653Z"}

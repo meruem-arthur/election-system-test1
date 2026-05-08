@@ -2,19 +2,31 @@ const nodemailer = require('nodemailer');
 const logger = require('../utils/logger');
 
 function createTransporter() {
+  const port = parseInt(process.env.SMTP_PORT) || 465;
+  const secure = port === 465;
+
   return nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: parseInt(process.env.SMTP_PORT) || 587,
-    secure: process.env.SMTP_PORT === '465',
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port,
+    secure,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS
+    },
+    connectionTimeout: 30000,
+    greetingTimeout: 30000,
+    socketTimeout: 30000,
+    pool: true,
+    maxConnections: 3,
+    tls: {
+      rejectUnauthorized: false
     }
   });
 }
 
 async function sendOTPEmail(to, name, code) {
   const transporter = createTransporter();
+
   const html = `
     <!DOCTYPE html>
     <html>
@@ -51,8 +63,10 @@ async function sendOTPEmail(to, name, code) {
   logger.info(`OTP email sent to ${to}`);
 }
 
-async function sendVoteConfirmationEmail(to, name, timestamp, receiptCode) {
+// Non-blocking — vote submission never waits for this
+function sendVoteConfirmationEmail(to, name, timestamp, receiptCode) {
   const transporter = createTransporter();
+
   const html = `
     <!DOCTYPE html>
     <html>
@@ -77,11 +91,16 @@ async function sendVoteConfirmationEmail(to, name, timestamp, receiptCode) {
     </html>
   `;
 
-  await transporter.sendMail({
+  // Fire and forget — never blocks the vote response
+  transporter.sendMail({
     from: `"${process.env.FROM_NAME}" <${process.env.FROM_EMAIL}>`,
     to,
     subject: 'Vote Confirmation Receipt',
     html
+  }).then(() => {
+    logger.info(`Vote confirmation email sent to ${to}`);
+  }).catch((err) => {
+    logger.warn(`Vote confirmation email failed (non-critical): ${err.message}`);
   });
 }
 
