@@ -159,12 +159,30 @@ router.post('/student/change-password', authenticateStudent, async (req, res) =>
       ip: req.ip
     });
 
-    // Now send OTP for verification
-    const student = await pool.query('SELECT * FROM students WHERE id = $1', [req.student.id]);
-    const otp = await otpService.sendOTP(student.rows[0]);
+    // Check if student was already manually approved — skip OTP if so
+    const studentRes = await pool.query('SELECT * FROM students WHERE id = $1', [req.student.id]);
+    const student = studentRes.rows[0];
+
+    if (student.is_verified) {
+      // Already approved by admin — issue full token immediately, skip OTP
+      const token = jwt.sign(
+        { id: student.id, type: 'student', electionId: student.election_id, isVerified: true },
+        process.env.JWT_SECRET,
+        { expiresIn: process.env.JWT_EXPIRES_IN || '8h' }
+      );
+      return res.json({
+        message: 'Password updated. Access granted.',
+        skipOTP: true,
+        token
+      });
+    }
+
+    // Not yet verified — send OTP as normal
+    const otp = await otpService.sendOTP(student);
 
     return res.json({
       message: 'Password updated. OTP sent for verification.',
+      skipOTP: false,
       otpChannel: otp.channel,
       otpSentTo: otp.maskedDestination
     });
@@ -214,6 +232,36 @@ router.post('/student/verify-otp', authenticateStudent, async (req, res) => {
   } catch (err) {
     logger.error('OTP verify error:', err);
     return res.status(500).json({ error: 'Verification failed' });
+  }
+});
+
+// ============================================================
+// CHECK VERIFICATION STATUS (OTP page polls this)
+// ============================================================
+
+router.get('/student/verification-status', authenticateStudent, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT is_verified FROM students WHERE id = $1',
+      [req.student.id]
+    );
+
+    const isVerified = rows[0]?.is_verified || false;
+
+    if (isVerified) {
+      // Issue full access token
+      const token = jwt.sign(
+        { id: req.student.id, type: 'student', electionId: req.student.election_id, isVerified: true },
+        process.env.JWT_SECRET,
+        { expiresIn: process.env.JWT_EXPIRES_IN || '8h' }
+      );
+      return res.json({ isVerified: true, token });
+    }
+
+    return res.json({ isVerified: false });
+  } catch (err) {
+    logger.error('Check verification status error:', err);
+    return res.status(500).json({ error: 'Failed to check status' });
   }
 });
 

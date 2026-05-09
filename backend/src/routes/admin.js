@@ -407,7 +407,14 @@ router.put('/candidates/:id', requireRole('super_admin', 'election_admin'), uplo
   if (!fullName || !positionId) return res.status(400).json({ error: 'Name and position required' });
 
   try {
-    let updateFields = { full_name: fullName, index_number: indexNumber, program, level, bio, position_id: positionId, display_order: displayOrder || 0 };
+    let updateFields = {};
+    updateFields.full_name = fullName;
+    updateFields.position_id = positionId;
+    updateFields.display_order = parseInt(displayOrder) || 0;
+    if (indexNumber !== undefined) updateFields.index_number = indexNumber;
+    if (program !== undefined) updateFields.program = program;
+    if (level !== undefined) updateFields.level = level;
+    if (bio !== undefined) updateFields.bio = bio;
 
     if (req.file) {
       // Delete old image from cloudinary if exists
@@ -447,8 +454,8 @@ router.put('/candidates/:id', requireRole('super_admin', 'election_admin'), uplo
 
     res.json(rows[0]);
   } catch (err) {
-    logger.error('Update candidate error:', err);
-    res.status(500).json({ error: 'Failed to update candidate' });
+    logger.error('Update candidate error:', err.message, err.stack);
+    res.status(500).json({ error: 'Failed to update candidate', detail: err.message });
   }
 });
 
@@ -536,7 +543,7 @@ router.put('/positions/:id', requireRole('super_admin', 'election_admin'), async
 
   try {
     const { rows } = await pool.query(
-      'UPDATE positions SET title = $1, description = $2, display_order = $3, updated_at = NOW() WHERE id = $4 RETURNING *',
+      'UPDATE positions SET title = $1, description = $2, display_order = $3 WHERE id = $4 RETURNING *',
       [title, description, displayOrder || 0, id]
     );
     if (!rows[0]) return res.status(404).json({ error: 'Position not found' });
@@ -606,6 +613,29 @@ router.patch('/students/:id/unlock', requireRole('super_admin', 'election_admin'
 router.patch('/students/:id/reset-otp', requireRole('super_admin', 'election_admin'), async (req, res) => {
   await pool.query('UPDATE students SET is_verified = false WHERE id = $1', [req.params.id]);
   res.json({ message: 'OTP verification reset. Student must re-verify.' });
+});
+
+// Alias — /verify does the same as /approve
+router.patch('/students/:id/verify', requireRole('super_admin', 'election_admin'), async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'UPDATE students SET is_verified = true WHERE id = $1 RETURNING id, full_name, reference_number',
+      [req.params.id]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Student not found' });
+    await auditService.log({
+      action: 'otp_verified',
+      actorType: 'admin',
+      actorId: req.admin.id,
+      actorEmail: req.admin.email,
+      metadata: { action: 'manual_approval', studentName: rows[0].full_name },
+      ip: req.ip
+    });
+    res.json({ message: `${rows[0].full_name} manually approved`, student: rows[0] });
+  } catch (err) {
+    logger.error('Verify student error:', err);
+    res.status(500).json({ error: 'Failed to verify student' });
+  }
 });
 
 // Manually approve a student (bypass OTP) — admin verified identity in person

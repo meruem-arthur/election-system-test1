@@ -11,12 +11,36 @@ export default function VerifyOTPPage() {
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [countdown, setCountdown] = useState(60);
+  const [adminApproved, setAdminApproved] = useState(false);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     inputRefs.current[0]?.focus();
+
+    // Countdown timer
     const timer = setInterval(() => setCountdown(c => Math.max(0, c - 1)), 1000);
-    return () => clearInterval(timer);
+
+    // Poll every 5 seconds to check if admin has manually approved
+    pollingRef.current = setInterval(async () => {
+      try {
+        const { data } = await authAPI.checkVerificationStatus();
+        if (data.isVerified) {
+          if (data.token) localStorage.setItem('token', data.token);
+          setAdminApproved(true);
+          if (pollingRef.current) clearInterval(pollingRef.current);
+          toast.success('You have been approved! Redirecting...');
+          setTimeout(() => router.push('/student/vote'), 1500);
+        }
+      } catch {
+        // Silently ignore polling errors
+      }
+    }, 5000);
+
+    return () => {
+      clearInterval(timer);
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
   }, []);
 
   const handleInput = (index: number, value: string) => {
@@ -25,8 +49,6 @@ export default function VerifyOTPPage() {
     newDigits[index] = value.slice(-1);
     setDigits(newDigits);
     if (value && index < 5) inputRefs.current[index + 1]?.focus();
-
-    // Auto-submit when all filled
     if (value && index === 5) {
       const code = [...newDigits.slice(0, 5), value.slice(-1)].join('');
       if (code.length === 6) submitCode(code);
@@ -99,9 +121,16 @@ export default function VerifyOTPPage() {
           Enter the 6-digit code sent to your registered phone or email
         </p>
 
+        {/* Admin approved banner */}
+        {adminApproved && (
+          <div className="mb-6 p-4 rounded-xl text-sm font-semibold"
+            style={{ background: 'rgba(0,255,136,0.1)', border: '1px solid rgba(0,255,136,0.3)', color: '#00ff88' }}>
+            ✅ Approved by admin! Redirecting to voting page...
+          </div>
+        )}
+
         <div className="card-glow p-7">
           <form onSubmit={handleSubmit}>
-            {/* OTP input boxes */}
             <div className="flex justify-center gap-2 mb-8" onPaste={handlePaste}>
               {digits.map((digit, i) => (
                 <input
@@ -124,7 +153,7 @@ export default function VerifyOTPPage() {
               ))}
             </div>
 
-            <button type="submit" disabled={loading || digits.join('').length < 6} className="btn-primary w-full mb-4">
+            <button type="submit" disabled={loading || digits.join('').length < 6 || adminApproved} className="btn-primary w-full mb-4">
               {loading ? <div className="spinner" /> : 'Verify Code'}
             </button>
           </form>
@@ -139,7 +168,13 @@ export default function VerifyOTPPage() {
           </button>
         </div>
 
-        <p className="text-xs text-dark-700 mt-6">
+        <div className="mt-6 p-3 rounded-xl text-xs text-dark-700"
+          style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid #1a1a1a' }}>
+          <p>Can't receive the code? Contact your admin to manually approve your account.</p>
+          <p className="mt-1">This page will automatically redirect once approved.</p>
+        </div>
+
+        <p className="text-xs text-dark-700 mt-4">
           Having trouble?{' '}
           <a href="/student/support" className="text-primary-500 hover:underline">Contact admin support</a>
         </p>

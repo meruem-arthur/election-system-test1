@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { voteAPI } from '@/lib/api';
 import toast from 'react-hot-toast';
-import { CheckCircle, Clock, ChevronRight, User, LogOut, HelpCircle, Shield } from 'lucide-react';
+import { CheckCircle, Clock, ChevronRight, User, LogOut, HelpCircle, Shield, BarChart2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import Image from 'next/image';
 
@@ -174,9 +174,17 @@ export default function VotingPage() {
             <span>Your ballot is anonymous. Your identity cannot be linked to your choices.</span>
           </div>
 
-          <button onClick={logout} className="btn-secondary">
-            <LogOut className="w-4 h-4" /> Sign Out
-          </button>
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={() => router.push('/student/live')}
+              className="btn-primary w-full"
+            >
+              <BarChart2 className="w-4 h-4" /> Watch Live Scores
+            </button>
+            <button onClick={logout} className="btn-secondary w-full">
+              <LogOut className="w-4 h-4" /> Sign Out
+            </button>
+          </div>
         </div>
       </div>
     );

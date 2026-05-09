@@ -16,20 +16,18 @@ export default function PublicResultsPage() {
 
   const loadResults = async () => {
     try {
-      // Get the latest election
-      const electionsRes = await adminAPI.getElections();
-      const elections = electionsRes.data;
-      if (!elections.length) {
-        setError('No election found.');
-        return;
-      }
-      // Get latest published election
-      const published = [...elections].reverse().find((e: any) => e.status === 'results_published');
-      if (!published) {
+      // Use the public /results/published endpoint — no admin auth needed
+      const { data: publishedElections } = await resultsAPI.getPublishedElections();
+
+      if (!publishedElections || publishedElections.length === 0) {
         setError('Results have not been officially released yet. Please check back later.');
+        setLoading(false);
         return;
       }
-      const { data } = await resultsAPI.getResults(published.id);
+
+      // Get the most recently published election
+      const latest = publishedElections[0];
+      const { data } = await resultsAPI.getResults(latest.id);
       setResults(data);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Results not available yet.');
@@ -99,43 +97,14 @@ export default function PublicResultsPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-bold text-white text-sm">{c.fullName}</p>
-                        {c.isYesNoVote ? (
-                          <span className={`badge text-xs ${c.isWinner ? 'badge-active' : 'badge-ended'}`}>
-                            {c.isWinner ? 'ELECTED ✓' : 'NOT ELECTED ✗'}
-                          </span>
-                        ) : (
-                          c.isWinner && <span className="badge badge-active text-xs">Winner 🏆</span>
-                        )}
+                        {c.isWinner && <span className="badge badge-active text-xs">Winner 🏆</span>}
                       </div>
-
-                      {/* YES/NO breakdown */}
-                      {c.isYesNoVote ? (
-                        <div className="mt-2 space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-primary-500 w-8">YES</span>
-                            <div className="flex-1 progress-bar h-2">
-                              <div className="progress-fill" style={{ width: `${c.percentage}%` }} />
-                            </div>
-                            <span className="text-xs text-primary-500 font-mono">{c.yesVotes} ({c.percentage}%)</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-red-400 w-8">NO</span>
-                            <div className="flex-1 progress-bar h-2">
-                              <div className="h-full rounded-full" style={{ width: `${c.noPercentage}%`, background: '#ff4444' }} />
-                            </div>
-                            <span className="text-xs text-red-400 font-mono">{c.noVotes} ({c.noPercentage}%)</span>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="progress-bar mt-1.5">
-                          <div className="progress-fill" style={{ width: `${c.percentage}%` }} />
-                        </div>
-                      )}
+                      <div className="progress-bar mt-1.5">
+                        <div className="progress-fill" style={{ width: `${c.percentage}%` }} />
+                      </div>
                     </div>
                     <div className="text-right flex-shrink-0">
-                      <p className="font-mono font-bold" style={{ color: '#00ff88' }}>
-                        {c.isYesNoVote ? c.yesVotes : c.votes}
-                      </p>
+                      <p className="font-mono font-bold" style={{ color: '#00ff88' }}>{c.votes}</p>
                       <p className="text-xs text-dark-700">{c.percentage}%</p>
                     </div>
                   </div>

@@ -65,6 +65,8 @@ export const voteAPI = {
 
   castVote: (votes: Array<{ positionId: string; candidateId: string }>) =>
     api.post('/vote/cast', { votes }),
+
+  getLiveScores: () => api.get('/vote/live'),
 };
 
 // ============================================================
@@ -84,9 +86,6 @@ export const adminAPI = {
 
   deleteElection: (id: string) =>
     api.delete(`/admin/elections/${id}`),
-
-  deleteAllElections: () =>
-    api.delete('/admin/elections'),
 
   getPositions: (electionId: string) =>
     api.get(`/admin/elections/${electionId}/positions`),
@@ -110,14 +109,23 @@ export const adminAPI = {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
 
-  deleteCandidate: (candidateId: string) =>
-    api.delete(`/admin/candidates/${candidateId}`),
-
   updatePosition: (positionId: string, data: any) =>
     api.put(`/admin/positions/${positionId}`, data),
 
-  deletePosition: (positionId: string) =>
-    api.delete(`/admin/positions/${positionId}`),
+  deleteCandidate: (candidateId: string) =>
+    api.delete(`/admin/candidates/${candidateId}`),
+
+  deleteAllCandidates: (electionId: string) =>
+    api.delete(`/admin/elections/${electionId}/candidates`),
+
+  deletePositionCandidates: (electionId: string, positionId: string) =>
+    api.delete(`/admin/elections/${electionId}/positions/${positionId}/candidates`),
+
+  deletePosition: (electionId: string, positionId: string) =>
+    api.delete(`/admin/elections/${electionId}/positions/${positionId}`),
+
+  deleteAllPositions: (electionId: string) =>
+    api.delete(`/admin/elections/${electionId}/positions`),
 
   getStudents: (electionId: string, params?: any) =>
     api.get(`/admin/elections/${electionId}/students`, { params }),
@@ -137,10 +145,10 @@ export const adminAPI = {
   unlockStudent: (studentId: string) =>
     api.patch(`/admin/students/${studentId}/unlock`),
 
-  manualApproveStudent: (studentId: string) =>
-    api.patch(`/admin/students/${studentId}/approve`),
+  verifyStudent: (studentId: string) =>
+    api.patch(`/admin/students/${studentId}/verify`),
 
-  updateStudentContact: (studentId: string, data: { phoneNumber?: string; schoolEmail?: string; resendOTP?: boolean }) =>
+  updateStudentContact: (studentId: string, data: { phoneNumber: string; schoolEmail: string }) =>
     api.patch(`/admin/students/${studentId}/contact`, data),
 
   deleteStudent: (studentId: string) =>

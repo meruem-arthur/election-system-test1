@@ -30,11 +30,18 @@ export default function ChangePasswordPage() {
     try {
       const { data } = await authAPI.changePassword(newPassword);
 
-      // Update token if returned
+      // Update token
       if (data.token) localStorage.setItem('token', data.token);
 
-      toast.success('Password updated! OTP sent for verification.');
-      router.push('/student/verify-otp');
+      if (data.skipOTP) {
+        // Admin already approved this student — go straight to voting
+        toast.success('Password updated! Access granted.');
+        router.push('/student/vote');
+      } else {
+        // Normal flow — go to OTP verification
+        toast.success('Password updated! OTP sent for verification.');
+        router.push('/student/verify-otp');
+      }
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Failed to update password');
     } finally { setLoading(false); }

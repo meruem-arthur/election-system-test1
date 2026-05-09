@@ -224,3 +224,126 @@ router.post('/cast', authenticateStudent, requireVerified, async (req, res) => {
 });
 
 module.exports = router;
+
+// ============================================================
+// LIVE SCORES — only accessible to students who have voted
+// ============================================================
+
+router.get('/live', authenticateStudent, requireVerified, async (req, res) => {
+  try {
+    // Only students who have voted can see live scores
+    if (!req.student.has_voted) {
+      return res.status(403).json({ error: 'You must vote before viewing live scores' });
+    }
+
+    const { rows: electionRows } = await pool.query(
+      'SELECT * FROM elections WHERE id = $1',
+      [req.student.election_id]
+    );
+    const election = electionRows[0];
+    if (!election) return res.status(404).json({ error: 'Election not found' });
+
+    // Only show live scores while election is active or ended
+    if (election.status === 'draft') {
+      return res.status(403).json({ error: 'Election has not started yet' });
+    }
+
+    // Get vote counts per candidate
+    const { rows: results } = await pool.query(`
+      SELECT
+        p.id as position_id,
+        p.title as position_title,
+        p.display_order,
+        c.id as candidate_id,
+        c.full_name,
+        c.image_url,
+        c.program,
+        (SELECT COUNT(*) FROM candidates c2 WHERE c2.position_id = p.id AND c2.election_id = p.election_id AND c2.is_approved = true) as position_candidate_count,
+        COUNT(b.id) FILTER (WHERE b.ballot_token NOT LIKE 'NO_%')::integer as yes_votes,
+        COUNT(b.id) FILTER (WHERE b.ballot_token LIKE 'NO_%')::integer as no_votes,
+        COUNT(b.id)::integer as total_votes
+      FROM positions p
+      JOIN candidates c ON c.position_id = p.id AND c.election_id = p.election_id AND c.is_approved = true
+      LEFT JOIN ballots b ON b.candidate_id = c.id AND b.election_id = p.election_id
+      WHERE p.election_id = $1
+      GROUP BY p.id, p.title, p.display_order, c.id, c.full_name, c.image_url, c.program
+      ORDER BY p.display_order, yes_votes DESC, total_votes DESC
+    `, [req.student.election_id]);
+
+    // Get voter turnout stats
+    const { rows: stats } = await pool.query(`
+      SELECT
+        COUNT(*)::integer as total_students,
+        COUNT(*) FILTER (WHERE has_voted = true)::integer as total_voted
+      FROM students WHERE election_id = $1
+    `, [req.student.election_id]);
+
+    // Group by position
+    const positionsMap = {};
+    for (const row of results) {
+      if (!positionsMap[row.position_id]) {
+        positionsMap[row.position_id] = {
+          id: row.position_id,
+          title: row.position_title,
+          displayOrder: row.display_order,
+          isYesNoVote: parseInt(row.position_candidate_count) === 1,
+          candidates: []
+        };
+      }
+      positionsMap[row.position_id].candidates.push({
+        id: row.candidate_id,
+        fullName: row.full_name,
+        imageUrl: row.image_url,
+        program: row.program,
+        yesVotes: row.yes_votes,
+        noVotes: row.no_votes,
+        totalVotes: row.total_votes,
+        isYesNoVote: parseInt(row.position_candidate_count) === 1
+      });
+    }
+
+    // Calculate percentages
+    const positions = Object.values(positionsMap).map((pos) => {
+      if (pos.isYesNoVote && pos.candidates.length > 0) {
+        const c = pos.candidates[0];
+        const total = c.yesVotes + c.noVotes;
+        c.percentage = total > 0 ? parseFloat(((c.yesVotes / total) * 100).toFixed(1)) : 0;
+        c.noPercentage = total > 0 ? parseFloat(((c.noVotes / total) * 100).toFixed(1)) : 0;
+        c.isLeading = c.yesVotes > c.noVotes;
+      } else {
+        const totalVotes = pos.candidates.reduce((sum, c) => sum + c.totalVotes, 0);
+        const maxVotes = Math.max(...pos.candidates.map(c => c.totalVotes), 0);
+        pos.candidates.forEach(c => {
+          c.percentage = totalVotes > 0 ? parseFloat(((c.totalVotes / totalVotes) * 100).toFixed(1)) : 0;
+          c.isLeading = c.totalVotes === maxVotes && maxVotes > 0;
+        });
+      }
+      return pos;
+    });
+
+    const totalStudents = stats[0].total_students;
+    const totalVoted = stats[0].total_voted;
+
+    return res.json({
+      election: {
+        id: election.id,
+        title: election.title,
+        status: election.status,
+        endTime: election.end_time
+      },
+      positions: positions.sort((a, b) => a.displayOrder - b.displayOrder),
+      stats: {
+        totalStudents,
+        totalVoted,
+        turnoutPercentage: totalStudents > 0
+          ? parseFloat(((totalVoted / totalStudents) * 100).toFixed(1))
+          : 0
+      },
+      lastUpdated: new Date().toISOString()
+    });
+
+  } catch (err) {
+    logger.error('Live scores error:', err);
+    return res.status(500).json({ error: 'Failed to load live scores' });
+  }
+});
