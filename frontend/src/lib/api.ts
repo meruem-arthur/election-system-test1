@@ -49,6 +49,8 @@ export const authAPI = {
 
   resendOTP: () => api.post('/auth/student/resend-otp'),
 
+  checkVerificationStatus: () => api.get('/auth/student/verification-status'),
+
   adminLogin: (email: string, password: string) =>
     api.post('/auth/admin/login', { email, password }),
 
