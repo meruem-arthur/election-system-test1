@@ -139,6 +139,31 @@ router.patch('/elections/:id/status', requireRole('super_admin', 'election_admin
 });
 
 // Delete election (any status) — clears all related data first
+// Delete ALL elections (super_admin only)
+router.delete('/elections', requireRole('super_admin'), async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT COUNT(*) FROM elections');
+    const count = parseInt(rows[0].count);
+
+    await pool.query('DELETE FROM audit_logs WHERE election_id IS NOT NULL');
+    await pool.query('DELETE FROM voter_status');
+    await pool.query('DELETE FROM ballots');
+    await pool.query('DELETE FROM otp_codes');
+    await pool.query('DELETE FROM support_tickets');
+    await pool.query('DELETE FROM csv_batches');
+    await pool.query('DELETE FROM students');
+    await pool.query('DELETE FROM candidates');
+    await pool.query('DELETE FROM positions');
+    await pool.query('DELETE FROM elections');
+
+    res.json({ message: `${count} election(s) and all related data deleted successfully` });
+  } catch (err) {
+    logger.error('Delete all elections error:', err);
+    res.status(500).json({ error: 'Failed to delete all elections: ' + err.message });
+  }
+});
+
+// Delete single election
 router.delete('/elections/:id', requireRole('super_admin', 'election_admin'), async (req, res) => {
   const { id } = req.params;
   try {

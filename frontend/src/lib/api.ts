@@ -87,6 +87,9 @@ export const adminAPI = {
   deleteElection: (id: string) =>
     api.delete(`/admin/elections/${id}`),
 
+  deleteAllElections: () =>
+    api.delete('/admin/elections'),
+
   getPositions: (electionId: string) =>
     api.get(`/admin/elections/${electionId}/positions`),
 
