@@ -100,7 +100,7 @@ export default function AdminCandidatesPage() {
   const deletePosition = async (pos: any) => {
     if (!confirm(`Delete position "${pos.title}"? This cannot be undone.`)) return;
     try {
-      await adminAPI.deletePosition(pos.id);
+      await adminAPI.deletePosition(selectedElectionId, pos.id);
       toast.success('Position deleted');
       loadData();
     } catch (err: any) {
