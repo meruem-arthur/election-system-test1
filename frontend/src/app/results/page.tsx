@@ -49,7 +49,7 @@ export default function PublicResultsPage() {
   if (error) return (
     <div className="min-h-screen bg-dark flex items-center justify-center p-4 relative overflow-hidden">
       <WaveBackground />
-      <div className="text-center max-w-md">
+      <div className="text-center max-w-md relative z-10">
         <div className="text-5xl mb-6">🔒</div>
         <h1 className="text-xl font-black uppercase tracking-widest mb-4" style={{ fontFamily: 'var(--font-orbitron)', color: '#00ff88' }}>
           Results Not Available
@@ -65,7 +65,7 @@ export default function PublicResultsPage() {
   return (
     <div className="min-h-screen bg-dark py-8 px-4 relative overflow-hidden">
       <WaveBackground />
-      <div className="max-w-2xl mx-auto">
+      <div className="max-w-2xl mx-auto relative z-10">
         {/* Header */}
         <div className="text-center mb-10">
           <h1 className="text-2xl font-black uppercase tracking-widest mb-2"
