@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import { CheckCircle, Clock, ChevronRight, User, LogOut, HelpCircle, Shield, BarChart2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import Image from 'next/image';
+import WaveBackground from '@/components/WaveBackground';
 
 interface Candidate { id: string; fullName: string; imageUrl: string | null; bio: string; program: string; level: string; }
 interface Position { id: string; title: string; candidates: Candidate[]; }
@@ -100,8 +101,9 @@ export default function VotingPage() {
 
   if (state === 'loading') {
     return (
-      <div className="min-h-screen bg-dark flex items-center justify-center">
-        <div className="text-center">
+      <div className="min-h-screen bg-dark flex items-center justify-center relative overflow-hidden">
+        <WaveBackground />
+        <div className="text-center relative z-10">
           <div className="spinner mx-auto mb-4" style={{ width: 40, height: 40 }} />
           <p className="text-dark-800 text-sm">Loading election data...</p>
         </div>
@@ -150,7 +152,8 @@ export default function VotingPage() {
 
   if (state === 'success') {
     return (
-      <div className="min-h-screen bg-dark flex items-center justify-center p-4">
+      <div className="min-h-screen bg-dark flex items-center justify-center p-4 relative overflow-hidden">
+        <WaveBackground />
         <div className="max-w-md w-full text-center animate-fade-in">
           <div className="w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-8"
             style={{ background: 'rgba(0,255,136,0.1)', border: '2px solid #00ff88', boxShadow: '0 0 40px rgba(0,255,136,0.3)' }}>
@@ -192,7 +195,8 @@ export default function VotingPage() {
 
   if (state === 'review') {
     return (
-      <div className="min-h-screen bg-dark p-4 py-8">
+      <div className="min-h-screen bg-dark p-4 py-8 relative overflow-hidden">
+        <WaveBackground />
         <div className="max-w-2xl mx-auto animate-fade-in">
           {/* Header */}
           <div className="text-center mb-8">

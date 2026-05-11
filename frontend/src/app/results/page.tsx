@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { resultsAPI } from '@/lib/api';
 import { Trophy, User, LogOut } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import WaveBackground from '@/components/WaveBackground';
 
 export default function PublicResultsPage() {
   const router = useRouter();
@@ -39,13 +40,15 @@ export default function PublicResultsPage() {
   const logout = () => { localStorage.clear(); router.push('/login'); };
 
   if (loading) return (
-    <div className="min-h-screen bg-dark flex items-center justify-center">
-      <div className="spinner" style={{ width: 40, height: 40 }} />
+    <div className="min-h-screen bg-dark flex items-center justify-center relative overflow-hidden">
+      <WaveBackground />
+      <div className="spinner relative z-10" style={{ width: 40, height: 40 }} />
     </div>
   );
 
   if (error) return (
-    <div className="min-h-screen bg-dark flex items-center justify-center p-4">
+    <div className="min-h-screen bg-dark flex items-center justify-center p-4 relative overflow-hidden">
+      <WaveBackground />
       <div className="text-center max-w-md">
         <div className="text-5xl mb-6">🔒</div>
         <h1 className="text-xl font-black uppercase tracking-widest mb-4" style={{ fontFamily: 'var(--font-orbitron)', color: '#00ff88' }}>
@@ -60,7 +63,8 @@ export default function PublicResultsPage() {
   );
 
   return (
-    <div className="min-h-screen bg-dark py-8 px-4">
+    <div className="min-h-screen bg-dark py-8 px-4 relative overflow-hidden">
+      <WaveBackground />
       <div className="max-w-2xl mx-auto">
         {/* Header */}
         <div className="text-center mb-10">

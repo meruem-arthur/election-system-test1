@@ -5,6 +5,7 @@ import { authAPI } from '@/lib/api';
 import toast from 'react-hot-toast';
 import { Eye, EyeOff, Zap, Shield, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
+import WaveBackground from '@/components/WaveBackground';
 
 export default function StudentLoginPage() {
   const router = useRouter();
@@ -44,11 +45,7 @@ export default function StudentLoginPage() {
 
   return (
     <div className="min-h-screen bg-dark flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Background effects */}
-      <div className="absolute inset-0 bg-grid opacity-30" />
-      <div className="absolute inset-0 bg-glow-radial opacity-20" />
-      <div className="scan-overlay" />
-
+      <WaveBackground />
       {/* Corner decorations */}
       <div className="absolute top-0 left-0 w-32 h-32 border-l-2 border-t-2 border-primary-500/20" />
       <div className="absolute bottom-0 right-0 w-32 h-32 border-r-2 border-b-2 border-primary-500/20" />

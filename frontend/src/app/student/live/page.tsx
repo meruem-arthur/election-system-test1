@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { voteAPI } from '@/lib/api';
 import { LogOut, User, Radio, RefreshCw, Users, CheckCircle, Clock } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import WaveBackground from '@/components/WaveBackground';
 
 const REFRESH_INTERVAL = 10000; // 10 seconds
 
@@ -66,8 +67,9 @@ export default function LiveScoresPage() {
   const logout = () => { localStorage.clear(); router.push('/login'); };
 
   if (loading) return (
-    <div className="min-h-screen bg-dark flex items-center justify-center">
-      <div className="text-center">
+    <div className="min-h-screen bg-dark flex items-center justify-center relative overflow-hidden">
+      <WaveBackground />
+      <div className="text-center relative z-10">
         <div className="spinner mx-auto mb-4" style={{ width: 40, height: 40 }} />
         <p className="text-dark-700 text-sm">Loading live scores...</p>
       </div>
@@ -75,7 +77,8 @@ export default function LiveScoresPage() {
   );
 
   if (error) return (
-    <div className="min-h-screen bg-dark flex items-center justify-center p-4">
+    <div className="min-h-screen bg-dark flex items-center justify-center p-4 relative overflow-hidden">
+      <WaveBackground />
       <div className="text-center">
         <p className="text-dark-700 mb-4">{error}</p>
         <button onClick={() => fetchScores(true)} className="btn-primary">Try Again</button>
@@ -87,7 +90,8 @@ export default function LiveScoresPage() {
   const isActive = election?.status === 'active';
 
   return (
-    <div className="min-h-screen bg-dark">
+    <div className="min-h-screen bg-dark relative overflow-hidden">
+      <WaveBackground />
 
       {/* ── Top bar ── */}
       <div className="sticky top-0 z-50 glass border-b border-dark-500">
