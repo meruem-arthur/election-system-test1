@@ -146,6 +146,7 @@ export default function VotingPage() {
         message="You have already voted in this election. Thank you for participating!"
         onLogout={logout}
         user={user}
+        showLive
       />
     );
   }
@@ -503,7 +504,7 @@ function CandidateCard({ candidate, isSelected, onSelect }: {
 // STATUS SCREEN COMPONENT
 // ============================================================
 
-function StatusScreen({ icon, title, message, startTime, onLogout, user, showResults, electionId }: any) {
+function StatusScreen({ icon, title, message, startTime, onLogout, user, showResults, showLive, electionId }: any) {
   const router = useRouter();
   return (
     <div className="min-h-screen bg-dark flex flex-col items-center justify-center p-4">
@@ -522,6 +523,11 @@ function StatusScreen({ icon, title, message, startTime, onLogout, user, showRes
         )}
 
         <div className="flex flex-col gap-3">
+          {showLive && (
+            <button onClick={() => router.push('/student/live')} className="btn-primary w-full">
+              <BarChart2 className="w-4 h-4" /> Watch Live Scores
+            </button>
+          )}
           {showResults && (
             <button onClick={() => router.push('/results')} className="btn-primary w-full">
               View Results
