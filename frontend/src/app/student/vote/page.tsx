@@ -35,7 +35,9 @@ export default function VotingPage() {
     try {
       const { data } = await voteAPI.getCandidates();
 
-      if (data.hasVoted) return setState('already_voted');
+      // Check both server and localStorage — protect against refresh mid-submission
+      const localUser = JSON.parse(localStorage.getItem('user') || '{}');
+      if (data.hasVoted || localUser.hasVoted) return setState('already_voted');
 
       if (data.electionStatus !== 'active') {
         setElection(data);
@@ -77,14 +79,25 @@ export default function VotingPage() {
       });
       const { data } = await voteAPI.castVote(votes);
       setReceipt(data.receiptCode);
-      setState('success');
 
       // Update local user
       const u = JSON.parse(localStorage.getItem('user') || '{}');
       localStorage.setItem('user', JSON.stringify({ ...u, hasVoted: true }));
+
+      setState('success');
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to submit vote');
-      setState('voting');
+      const errMsg = err.response?.data?.error || '';
+
+      // Already voted — don't loop back, go to already_voted screen
+      if (err.response?.status === 409 || errMsg.includes('already voted')) {
+        toast.success('Your vote was already recorded!');
+        setState('already_voted');
+        return;
+      }
+
+      // Any other error — stay on review page so button stays visible
+      toast.error(errMsg || 'Connection timed out. Please try again.');
+      // DO NOT setState('voting') — keep them on review so they can retry
     } finally {
       setSubmitting(false);
     }
@@ -251,12 +264,22 @@ export default function VotingPage() {
             <p className="text-xs text-yellow-400 font-semibold">⚠️ This action is irreversible. Once submitted, your vote cannot be changed.</p>
           </div>
 
+          {submitting && (
+            <div className="card p-4 mb-4 text-center" style={{ borderColor: 'rgba(180,79,255,0.3)', background: 'rgba(180,79,255,0.05)' }}>
+              <p className="text-xs font-semibold" style={{ color: '#b44fff' }}>⏳ Submitting your vote... Please do not refresh or close this page.</p>
+            </div>
+          )}
+
           <div className="flex gap-4">
-            <button onClick={() => setState('voting')} className="btn-secondary flex-1">
+            <button onClick={() => setState('voting')} disabled={submitting} className="btn-secondary flex-1">
               ← Go Back
             </button>
             <button onClick={handleSubmit} disabled={submitting} className="btn-primary flex-1">
-              {submitting ? <div className="spinner" /> : 'Submit My Vote'}
+              {submitting ? (
+                <span className="flex items-center gap-2">
+                  <div className="spinner" style={{ width: 16, height: 16 }} /> Submitting...
+                </span>
+              ) : 'Submit My Vote'}
             </button>
           </div>
         </div>
