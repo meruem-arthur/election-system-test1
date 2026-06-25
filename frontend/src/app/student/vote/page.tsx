@@ -209,7 +209,7 @@ export default function VotingPage() {
 
   if (state === 'review') {
     return (
-      <div className="min-h-screen bg-dark p-4 py-8 relative overflow-hidden">
+      <div className="min-h-screen bg-dark p-4 py-8 relative">
         <WaveBackground />
         <div className="max-w-2xl mx-auto animate-fade-in">
           {/* Header */}
