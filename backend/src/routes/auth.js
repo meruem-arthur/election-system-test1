@@ -47,8 +47,8 @@ router.post('/student/login', async (req, res) => {
       return res.status(403).json({ error: 'Account locked. Please contact support.' });
     }
 
-    // Check failed attempts
-    if (student.failed_login_attempts >= 5) {
+    // Check failed attempts — lock after 10 failed tries
+    if (student.failed_login_attempts >= 10) {
       await pool.query('UPDATE students SET account_locked = true WHERE id = $1', [student.id]);
       return res.status(403).json({ error: 'Account locked after too many attempts. Contact support.' });
     }
@@ -57,9 +57,10 @@ router.post('/student/login', async (req, res) => {
 
     if (student.is_first_login) {
       // Temporary password: Surname + last 4 digits of reference number
+      // Case-insensitive so MENSAH0723 = Mensah0723 = mensah0723
       const last4 = referenceNumber.slice(-4);
       const tempPassword = `${student.surname}${last4}`;
-      passwordValid = password === tempPassword;
+      passwordValid = password.toLowerCase() === tempPassword.toLowerCase();
     } else {
       passwordValid = await bcrypt.compare(password, student.password_hash);
     }
@@ -97,7 +98,7 @@ router.post('/student/login', async (req, res) => {
     };
 
     const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, {
-      expiresIn: student.is_first_login || !student.is_verified ? '30m' : process.env.JWT_EXPIRES_IN || '8h'
+      expiresIn: student.is_first_login || !student.is_verified ? '2h' : process.env.JWT_EXPIRES_IN || '8h'
     });
 
     return res.json({

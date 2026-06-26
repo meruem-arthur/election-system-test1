@@ -1883,3 +1883,10 @@
 {"ip":"::1","level":"info","message":"GET /api/vote/live","timestamp":"2026-06-10T04:12:22.134Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"}
 {"ip":"::1","level":"info","message":"GET /api/vote/live","timestamp":"2026-06-10T04:13:22.137Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"}
 {"ip":"::1","level":"info","message":"GET /api/vote/live","timestamp":"2026-06-10T04:14:22.140Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"}
+{"level":"info","message":"✅ Database connected","timestamp":"2026-06-25T06:42:26.260Z"}
+{"level":"info","message":"🚀 Election System API running on port 5000","timestamp":"2026-06-25T06:42:26.331Z"}
+{"level":"info","message":"   Environment: development","timestamp":"2026-06-25T06:42:26.338Z"}
+{"ip":"::1","level":"info","message":"POST /api/auth/admin/login","timestamp":"2026-06-25T06:47:14.852Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"}
+{"ip":"::1","level":"info","message":"GET /api/admin/elections","timestamp":"2026-06-25T06:47:52.316Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"}
+{"ip":"::1","level":"info","message":"GET /api/admin/elections","timestamp":"2026-06-25T06:47:52.749Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"}
+{"ip":"::1","level":"info","message":"GET /api/admin/dashboard/11eae5aa-310c-4318-8097-ed071b56ce98","timestamp":"2026-06-25T06:47:52.929Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"}

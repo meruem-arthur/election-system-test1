@@ -28,10 +28,35 @@ export default function VotingPage() {
   useEffect(() => {
     const u = localStorage.getItem('user');
     if (u) setUser(JSON.parse(u));
-    loadCandidates();
+
+    // Restore selections from sessionStorage if they exist (survives re-renders)
+    const savedSelections = sessionStorage.getItem('voteSelections');
+    const savedState = sessionStorage.getItem('voteState');
+    if (savedSelections) setSelections(JSON.parse(savedSelections));
+
+    loadCandidates(savedState === 'review');
   }, []);
 
-  const loadCandidates = async () => {
+  // Persist selections to sessionStorage whenever they change
+  useEffect(() => {
+    if (Object.keys(selections).length > 0) {
+      sessionStorage.setItem('voteSelections', JSON.stringify(selections));
+    }
+  }, [selections]);
+
+  // Persist state to sessionStorage
+  useEffect(() => {
+    if (state !== 'loading') {
+      sessionStorage.setItem('voteState', state);
+    }
+    // Clear session on terminal states
+    if (state === 'success' || state === 'already_voted') {
+      sessionStorage.removeItem('voteSelections');
+      sessionStorage.removeItem('voteState');
+    }
+  }, [state]);
+
+  const loadCandidates = async (restoreReview = false) => {
     try {
       const { data } = await voteAPI.getCandidates();
 
@@ -47,7 +72,13 @@ export default function VotingPage() {
 
       setElection(data.election);
       setPositions(data.positions || []);
-      setState('voting');
+
+      // If they were on the review page before re-render, restore it
+      if (restoreReview) {
+        setState('review');
+      } else {
+        setState('voting');
+      }
     } catch (err: any) {
       toast.error('Failed to load candidates');
       setState('not_started');
@@ -211,7 +242,7 @@ export default function VotingPage() {
     return (
       <div className="min-h-screen bg-dark p-4 py-8 relative">
         <WaveBackground />
-        <div className="max-w-2xl mx-auto animate-fade-in">
+        <div className="max-w-2xl mx-auto animate-fade-in" style={{ position: 'relative', zIndex: 10 }}>
           {/* Header */}
           <div className="text-center mb-8">
             <h1 className="text-2xl font-black uppercase tracking-widest mb-2" style={{ fontFamily: 'var(--font-orbitron)', color: '#00ff88' }}>
@@ -270,11 +301,21 @@ export default function VotingPage() {
             </div>
           )}
 
-          <div className="flex gap-4">
-            <button onClick={() => setState('voting')} disabled={submitting} className="btn-secondary flex-1">
+          <div className="flex gap-4" style={{ position: 'relative', zIndex: 20 }}>
+            <button
+              type="button"
+              onClick={() => setState('voting')}
+              disabled={submitting}
+              className="btn-secondary flex-1"
+            >
               ← Go Back
             </button>
-            <button onClick={handleSubmit} disabled={submitting} className="btn-primary flex-1">
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={submitting}
+              className="btn-primary flex-1"
+            >
               {submitting ? (
                 <span className="flex items-center gap-2">
                   <div className="spinner" style={{ width: 16, height: 16 }} /> Submitting...
