@@ -35,20 +35,30 @@ async function sendOTP(student) {
     [student.id]
   );
 
-  // Determine channel — prefer email, fallback to SMS, fallback to console-only
-  let channel = 'console';
-  let destination = 'console';
-  let maskedDestination = 'console (dev mode)';
+  // Send via BOTH email and SMS whenever both are available — students often
+  // give a wrong/unused email but always have their phone, so SMS guarantees delivery
+  const channels = [];
+  let emailDestination = null;
+  let smsDestination = null;
+  let emailMasked = null;
+  let smsMasked = null;
 
   if (student.school_email) {
-    channel = 'email';
-    destination = student.school_email;
-    maskedDestination = maskDestination(destination, 'email');
-  } else if (student.phone_number) {
-    channel = 'sms';
-    destination = student.phone_number;
-    maskedDestination = maskDestination(destination, 'sms');
+    channels.push('email');
+    emailDestination = student.school_email;
+    emailMasked = maskDestination(emailDestination, 'email');
   }
+  if (student.phone_number) {
+    channels.push('sms');
+    smsDestination = student.phone_number;
+    smsMasked = maskDestination(smsDestination, 'sms');
+  }
+
+  // channel/sent_to columns store a single value — record a combined summary
+  // so the DB still reflects exactly where the OTP was actually sent
+  const channel = channels.length > 0 ? channels.join('+') : 'console';
+  const destination = [emailDestination, smsDestination].filter(Boolean).join(', ') || 'console';
+  const maskedDestination = [emailMasked, smsMasked].filter(Boolean).join(', ') || 'console (dev mode)';
 
   // Store OTP
   await pool.query(
@@ -66,25 +76,31 @@ async function sendOTP(student) {
   console.log('  OTP Code: \x1b[32m\x1b[1m' + code + '\x1b[0m  <-- USE THIS');
   console.log('='.repeat(52) + '\n');
 
-  // Try sending via email/SMS — silently skip if not configured
-  if (channel === 'email') {
+  // Try sending via email AND SMS independently — one failing should never
+  // block or skip the other, since each is a separate delivery channel
+  if (emailDestination) {
     try {
       const emailService = require('./email');
-      await emailService.sendOTPEmail(destination, student.full_name, code);
-      logger.info('OTP email sent to ' + maskedDestination);
+      await emailService.sendOTPEmail(emailDestination, student.full_name, code);
+      logger.info('OTP email sent to ' + emailMasked);
     } catch (err) {
       logger.warn('OTP email failed — use the code printed in console above');
       logger.error('OTP email error detail: ' + (err && err.message ? err.message : err));
       if (err && err.code) logger.error('OTP email error code: ' + err.code);
       if (err && err.response) logger.error('OTP email SMTP response: ' + err.response);
     }
-  } else if (channel === 'sms') {
+  }
+
+  if (smsDestination) {
     try {
       const smsService = require('./sms');
-      await smsService.sendOTPSMS(destination, code);
-      logger.info('OTP SMS sent to ' + maskedDestination);
+      await smsService.sendOTPSMS(smsDestination, code);
+      logger.info('OTP SMS sent to ' + smsMasked);
     } catch (err) {
       logger.warn('OTP SMS failed — use the code printed in console above');
+      logger.error('OTP SMS error detail: ' + (err && err.message ? err.message : err));
+      if (err && err.code) logger.error('OTP SMS error code: ' + err.code);
+      if (err && err.moreInfo) logger.error('OTP SMS Twilio info: ' + err.moreInfo);
     }
   }
 
