@@ -62,6 +62,13 @@ export default function VotingPage() {
 
       // Check both server and localStorage — protect against refresh mid-submission
       const localUser = JSON.parse(localStorage.getItem('user') || '{}');
+
+      // Capture election status (e.g. results_published) even when the
+      // backend's "not active" branch short-circuits before hasVoted is set
+      if (data.electionStatus && data.electionStatus !== 'active') {
+        setElection(data);
+      }
+
       if (data.hasVoted || localUser.hasVoted) return setState('already_voted');
 
       if (data.electionStatus !== 'active') {
@@ -183,6 +190,7 @@ export default function VotingPage() {
   }
 
   if (state === 'already_voted') {
+    const resultsPublished = election?.electionStatus === 'results_published';
     return (
       <StatusScreen
         icon="✅"
@@ -190,7 +198,8 @@ export default function VotingPage() {
         message="You have already voted in this election. Thank you for participating!"
         onLogout={logout}
         user={user}
-        showLive
+        showLive={!resultsPublished}
+        showResults={resultsPublished}
       />
     );
   }
