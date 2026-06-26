@@ -74,6 +74,9 @@ async function sendOTP(student) {
       logger.info('OTP email sent to ' + maskedDestination);
     } catch (err) {
       logger.warn('OTP email failed — use the code printed in console above');
+      logger.error('OTP email error detail: ' + (err && err.message ? err.message : err));
+      if (err && err.code) logger.error('OTP email error code: ' + err.code);
+      if (err && err.response) logger.error('OTP email SMTP response: ' + err.response);
     }
   } else if (channel === 'sms') {
     try {
