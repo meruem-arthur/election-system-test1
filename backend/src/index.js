@@ -7,7 +7,6 @@ const logger = require('./utils/logger');
 require('dotenv').config();
 
 const app = express();
-
 app.set('trust proxy', 1);
 
 // ============================================================
@@ -25,21 +24,36 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// Global rate limiter
+// Global rate limiter — generous, just prevents extreme abuse
 const limiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
-  max: parseInt(process.env.RATE_LIMIT_MAX) || 100,
+  max: parseInt(process.env.RATE_LIMIT_MAX) || 200,
   message: { error: 'Too many requests, please try again later.' },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  // Skip health check pings from UptimeRobot
+  skip: (req) => req.path === '/api/health'
 });
 app.use(limiter);
 
-// Strict login rate limiter
+// Login rate limiter — much more generous, keyed by IP + reference number
+// so different students from same IP don't block each other
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
-  message: { error: 'Too many login attempts. Please wait 15 minutes.' }
+  max: 50, // 50 login attempts per IP per 15 mins — enough for a whole class
+  message: { error: 'Too many login attempts from this network. Please wait 15 minutes.' },
+  // Key by IP only for admin login, but student login is handled in auth.js per-account
+  keyGenerator: (req) => {
+    // Use IP + reference number so each student account has its own counter
+    const refNumber = req.body?.referenceNumber || req.body?.email || 'unknown';
+    return `${req.ip}_${refNumber}`;
+  },
+  skip: (req) => {
+    // Don't rate limit OTP verification or resend — those have their own limits
+    return req.path === '/student/verify-otp' ||
+           req.path === '/student/resend-otp' ||
+           req.path === '/student/verification-status';
+  }
 });
 
 app.use(express.json({ limit: '10mb' }));
@@ -50,10 +64,13 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // ============================================================
 
 app.use((req, res, next) => {
-  logger.info(`${req.method} ${req.path}`, {
-    ip: req.ip,
-    userAgent: req.get('user-agent')
-  });
+  // Skip logging health checks to reduce noise
+  if (req.path !== '/api/health') {
+    logger.info(`${req.method} ${req.path}`, {
+      ip: req.ip,
+      userAgent: req.get('user-agent')
+    });
+  }
   next();
 });
 
@@ -81,7 +98,7 @@ app.use('/api/results', resultRoutes);
 app.use('/api/support', supportRoutes);
 app.use('/api/audit', auditRoutes);
 
-// Health check
+// Health check — always responds, never rate limited
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
@@ -109,7 +126,6 @@ async function startServer() {
   try {
     await pool.query('SELECT 1');
     logger.info('✅ Database connected');
-
     app.listen(PORT, () => {
       logger.info(`🚀 Election System API running on port ${PORT}`);
       logger.info(`   Environment: ${process.env.NODE_ENV}`);
@@ -121,5 +137,4 @@ async function startServer() {
 }
 
 startServer();
-
 module.exports = app;
