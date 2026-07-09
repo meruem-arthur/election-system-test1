@@ -125,12 +125,25 @@ router.get('/:electionId', async (req, res) => {
         // Normal multi-candidate position
         const totalVotes = pos.candidates.reduce((sum, c) => sum + c.votes, 0);
         const max = Math.max(...pos.candidates.map((c) => c.votes));
+        const topCandidates = pos.candidates.filter((c) => c.votes === max && max > 0);
+        const isTie = topCandidates.length > 1;
+
         pos.candidates.forEach((c) => {
           c.percentage = totalVotes > 0
             ? parseFloat(((c.votes / totalVotes) * 100).toFixed(1))
             : 0;
-          c.isWinner = c.votes === max && max > 0;
+          if (isTie && c.votes === max && max > 0) {
+            c.isWinner = false;
+            c.isTied = true;
+          } else {
+            c.isWinner = c.votes === max && max > 0;
+            c.isTied = false;
+          }
         });
+
+        // Flag the position itself as having a tie so frontend can show a notice
+        pos.hasTie = isTie;
+        pos.tiedCandidates = isTie ? topCandidates.map((c) => c.fullName) : [];
       }
     });
 
