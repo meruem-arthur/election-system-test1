@@ -89,6 +89,13 @@ export default function PublicResultsPage() {
                 <Trophy className="w-4 h-4" /> {position.title}
               </h2>
 
+              {position.hasTie && (
+                <div className="mb-4 px-4 py-3 rounded-xl text-sm font-semibold flex items-center gap-2"
+                  style={{ background: 'rgba(255,170,0,0.08)', border: '1px solid rgba(255,170,0,0.3)', color: '#ffaa00' }}>
+                  ⚖️ This position is tied between {position.tiedCandidates?.join(' and ')}. A runoff is required — admin decision needed.
+                </div>
+              )}
+
               <div className="space-y-3">
                 {position.candidates.map((c: any, i: number) => (
                   <div key={c.id} className={`flex items-center gap-4 p-3 rounded-xl ${c.isWinner ? 'border' : ''}`}
@@ -101,7 +108,8 @@ export default function PublicResultsPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-bold text-white text-sm">{c.fullName}</p>
-                        {c.isWinner && <span className="badge badge-active text-xs">Winner 🏆</span>}
+                        {c.isWinner && !c.isTied && <span className="badge badge-active text-xs">Winner 🏆</span>}
+                        {c.isTied && <span className="badge text-xs" style={{ background: 'rgba(255,170,0,0.15)', color: '#ffaa00', border: '1px solid rgba(255,170,0,0.3)' }}>Tied — Runoff Required ⚖️</span>}
                       </div>
                       <div className="progress-bar mt-1.5">
                         <div className="progress-fill" style={{ width: `${c.percentage}%` }} />
