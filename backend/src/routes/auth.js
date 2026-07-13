@@ -53,17 +53,22 @@ router.post('/student/login', async (req, res) => {
       return res.status(403).json({ error: 'Account locked after too many attempts. Contact support.' });
     }
 
+    // Password is always verified against the stored bcrypt hash — whether
+    // it's the randomly generated temp password issued at import, or the
+    // real password the student later chose. Nothing is ever derived from
+    // public info like surname or reference number.
     let passwordValid = false;
 
-    if (student.is_first_login) {
-      // Temporary password: Surname + last 4 digits of reference number
-      // Case-insensitive so MENSAH0723 = Mensah0723 = mensah0723
-      const last4 = referenceNumber.slice(-4);
-      const tempPassword = `${student.surname}${last4}`;
-      passwordValid = password.toLowerCase() === tempPassword.toLowerCase();
-    } else {
-      passwordValid = await bcrypt.compare(password, student.password_hash);
+    if (!student.password_hash) {
+      // Legacy account created before random temp passwords existed, or an
+      // admin hasn't issued credentials yet — no derivable fallback exists.
+      logger.warn(`Login attempt for student ${student.id} with no password_hash set`);
+      return res.status(401).json({
+        error: 'Your login credentials have not been issued yet. Please contact your election administrator.'
+      });
     }
+
+    passwordValid = await bcrypt.compare(password, student.password_hash);
 
     if (!passwordValid) {
       await pool.query(
@@ -189,6 +194,12 @@ router.post('/student/change-password', authenticateStudent, async (req, res) =>
     });
 
   } catch (err) {
+    if (err.code === 'OTP_COOLDOWN') {
+      return res.status(429).json({ error: err.message, retryAfterSeconds: err.retryAfterSeconds });
+    }
+    if (err.code === 'OTP_RATE_LIMIT') {
+      return res.status(429).json({ error: err.message });
+    }
     logger.error('Change password error:', err);
     return res.status(500).json({ error: 'Failed to update password' });
   }
@@ -270,7 +281,18 @@ router.get('/student/verification-status', authenticateStudent, async (req, res)
 // RESEND OTP
 // ============================================================
 
-router.post('/student/resend-otp', authenticateStudent, async (req, res) => {
+// Dedicated per-account limiter for resend-otp — keyed by the authenticated
+// student's id (not just IP), so it can't be sidestepped by switching networks,
+// and doesn't accidentally throttle a whole shared IP (e.g. campus wifi/NAT).
+const rateLimit = require('express-rate-limit');
+const resendOtpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 8, // hard ceiling per account per 15 min; the cooldown/window cap in otp.js does the finer-grained limiting
+  keyGenerator: (req) => req.student?.id || req.ip,
+  message: { error: 'Too many OTP requests. Please wait a few minutes and try again.' }
+});
+
+router.post('/student/resend-otp', authenticateStudent, resendOtpLimiter, async (req, res) => {
   try {
     const { rows } = await pool.query('SELECT * FROM students WHERE id = $1', [req.student.id]);
     const otp = await otpService.sendOTP(rows[0]);
@@ -280,6 +302,12 @@ router.post('/student/resend-otp', authenticateStudent, async (req, res) => {
       otpSentTo: otp.maskedDestination
     });
   } catch (err) {
+    if (err.code === 'OTP_COOLDOWN') {
+      return res.status(429).json({ error: err.message, retryAfterSeconds: err.retryAfterSeconds });
+    }
+    if (err.code === 'OTP_RATE_LIMIT') {
+      return res.status(429).json({ error: err.message });
+    }
     logger.error('Resend OTP error:', err);
     return res.status(500).json({ error: 'Failed to resend OTP' });
   }

@@ -3,6 +3,14 @@ const bcrypt = require('bcryptjs');
 const { pool } = require('../config/database');
 const logger = require('../utils/logger');
 
+// --- OTP send abuse protection ---
+// Minimum time a student must wait between requesting codes (blocks rapid-fire
+// resend spam, which previously reset the 5-attempt guess counter on demand).
+const RESEND_COOLDOWN_SECONDS = parseInt(process.env.OTP_RESEND_COOLDOWN_SECONDS) || 45;
+// Max number of codes that can be sent to one student within the rolling window below.
+const MAX_SENDS_PER_WINDOW = parseInt(process.env.OTP_MAX_SENDS_PER_WINDOW) || 5;
+const SEND_WINDOW_MINUTES = parseInt(process.env.OTP_SEND_WINDOW_MINUTES) || 60;
+
 function generateOTPCode(length = 6) {
   const digits = '0123456789';
   let code = '';
@@ -25,6 +33,34 @@ function maskDestination(value, type) {
 }
 
 async function sendOTP(student) {
+  // --- Enforce cooldown + rolling-window cap before issuing a new code ---
+  const { rows: recentSends } = await pool.query(
+    `SELECT code_hash, created_at FROM otp_codes
+     WHERE student_id = $1 AND created_at > NOW() - ($2 || ' minutes')::interval
+     ORDER BY created_at DESC`,
+    [student.id, SEND_WINDOW_MINUTES]
+  );
+
+  if (recentSends.length > 0) {
+    const secondsSinceLastSend = (Date.now() - new Date(recentSends[0].created_at).getTime()) / 1000;
+    if (secondsSinceLastSend < RESEND_COOLDOWN_SECONDS) {
+      const wait = Math.ceil(RESEND_COOLDOWN_SECONDS - secondsSinceLastSend);
+      const err = new Error(`Please wait ${wait} seconds before requesting another code.`);
+      err.code = 'OTP_COOLDOWN';
+      err.retryAfterSeconds = wait;
+      throw err;
+    }
+  }
+
+  // Each sendOTP() call may insert multiple rows (one per channel) sharing one
+  // code_hash — count distinct send *events*, not raw rows, against the cap.
+  const distinctSendEvents = new Set(recentSends.map(r => r.code_hash)).size;
+  if (distinctSendEvents >= MAX_SENDS_PER_WINDOW) {
+    const err = new Error('Too many verification codes requested. Please wait before trying again or contact support.');
+    err.code = 'OTP_RATE_LIMIT';
+    throw err;
+  }
+
   const code = generateOTPCode(parseInt(process.env.OTP_LENGTH) || 6);
   const codeHash = await bcrypt.hash(code, 8);
   const expiresAt = new Date(Date.now() + (parseInt(process.env.OTP_EXPIRY_MINUTES) || 10) * 60 * 1000);

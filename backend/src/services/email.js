@@ -100,4 +100,53 @@ function sendVoteConfirmationEmail(to, name, timestamp, receiptCode) {
     .catch(err => logger.warn(`Vote confirmation email failed (non-critical): ${err.message}`));
 }
 
-module.exports = { sendOTPEmail, sendVoteConfirmationEmail };
+// ============================================================
+// LOGIN CREDENTIALS EMAIL — sent once, when a student account
+// is created, credentials are regenerated, or bulk-dispatched.
+//
+// IMPORTANT: reference number is included — it's the student's LOGIN
+// (username). The phase1 zip's replacement dropped it from the message
+// entirely and sent only the password + a login link, which would leave
+// students unable to log in without separately knowing their reference
+// number. Restored here alongside the new login-link button.
+// ============================================================
+
+async function sendCredentialsEmail(to, name, referenceNumber, tempPassword, loginUrl) {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head><style>
+      body { font-family: Arial, sans-serif; background: #0a0a0a; color: #fff; margin: 0; padding: 20px; }
+      .container { max-width: 500px; margin: auto; background: #111; border: 1px solid #b44fff; border-radius: 12px; padding: 40px; }
+      .logo { color: #b44fff; font-size: 20px; font-weight: bold; margin-bottom: 30px; }
+      .creds { background: #1a1a1a; border-radius: 8px; padding: 20px; margin: 20px 0; border: 1px solid #f5c842; }
+      .creds p { margin: 8px 0; }
+      .value { font-family: monospace; font-size: 18px; color: #f5c842; letter-spacing: 1px; }
+      .btn { display: inline-block; margin-top: 12px; padding: 12px 24px; background: #b44fff; color: #fff; text-decoration: none; border-radius: 8px; font-weight: bold; }
+      .footer { color: #666; font-size: 12px; margin-top: 30px; }
+    </style></head>
+    <body>
+      <div class="container">
+        <div class="logo">⚡ GESA SMART ELECTION SYSTEM</div>
+        <p>Hello <strong>${name}</strong>,</p>
+        <p>Your login credentials for the election portal are below. You will be asked to set a new password on your first login.</p>
+        <div class="creds">
+          <p>Reference Number: <span class="value">${referenceNumber}</span></p>
+          <p>Temporary Password: <span class="value">${tempPassword}</span></p>
+        </div>
+        ${loginUrl ? `<p style="text-align:center;"><a class="btn" href="${loginUrl}">Log In Now</a></p>` : ''}
+        <p>This temporary password is unique to you and was randomly generated. Do not share it with anyone.</p>
+        <div class="footer">
+          <p>If you did not expect this email, please contact your election administrator immediately.</p>
+          <p>GESA UMaT — Departmental Smart Election System</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  await sendViaBrevo(to, 'Your Election Portal Login Credentials', html, name);
+  logger.info(`Credentials email sent via Brevo to ${to}`);
+}
+
+module.exports = { sendOTPEmail, sendVoteConfirmationEmail, sendCredentialsEmail };

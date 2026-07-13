@@ -9,8 +9,15 @@ const { authenticateAdmin, requireRole } = require('../middleware/auth');
 const cloudinary = require('../config/cloudinary');
 const auditService = require('../services/audit');
 const logger = require('../utils/logger');
+const crypto = require('crypto');
+const { sendCredentialsEmail } = require('../services/email');
+const { sendCredentialsSMS } = require('../services/sms');
+const { generateTempPassword } = require('../utils/password');
+const credentialDispatch = require('../services/credentialDispatch');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+
+const LOGIN_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
 // All admin routes require authentication
 router.use(authenticateAdmin);
@@ -275,16 +282,40 @@ router.post('/elections/:electionId/students/upload', requireRole('super_admin',
     // Insert valid students
     let inserted = 0;
     let duplicates = 0;
+    let credentialSendFailures = 0;
 
     for (const student of valid) {
       try {
-        await pool.query(
-          `INSERT INTO students (election_id, full_name, surname, index_number, reference_number, level, department, program, phone_number, school_email, csv_batch_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-           ON CONFLICT (reference_number) DO NOTHING`,
-          [electionId, student.fullName, student.surname, student.indexNumber, student.referenceNumber, student.level, student.department, student.program, student.phone, student.email, batchId]
+        const tempPassword = generateTempPassword();
+        const passwordHash = await bcrypt.hash(tempPassword, parseInt(process.env.BCRYPT_ROUNDS) || 12);
+
+        const { rows: insertedRows } = await pool.query(
+          `INSERT INTO students (election_id, full_name, surname, index_number, reference_number, level, department, program, phone_number, school_email, csv_batch_id, password_hash)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+           ON CONFLICT (reference_number) DO NOTHING
+           RETURNING id`,
+          [electionId, student.fullName, student.surname, student.indexNumber, student.referenceNumber, student.level, student.department, student.program, student.phone, student.email, batchId, passwordHash]
         );
-        inserted++;
+
+        if (insertedRows[0]) {
+          inserted++;
+
+          // Best-effort credential delivery — a delivery failure shouldn't
+          // fail the import; the admin can resend via the regenerate route.
+          try {
+            if (student.email) {
+              await sendCredentialsEmail(student.email, student.fullName, student.referenceNumber, tempPassword, `${LOGIN_URL}/login`);
+            } else if (student.phone) {
+              await sendCredentialsSMS(student.phone, student.fullName, student.referenceNumber, tempPassword, `${LOGIN_URL}/login`);
+            } else {
+              credentialSendFailures++;
+              errors.push({ row: student.referenceNumber, error: 'No email or phone on file — credentials not sent. Use "Regenerate credentials" once contact info is added.' });
+            }
+          } catch (sendErr) {
+            credentialSendFailures++;
+            errors.push({ row: student.referenceNumber, error: `Student created but credential delivery failed: ${sendErr.message}` });
+          }
+        }
       } catch (err) {
         if (err.code === '23505') duplicates++;
         else errors.push({ error: err.message });
@@ -635,6 +666,59 @@ router.patch('/students/:id/unlock', requireRole('super_admin', 'election_admin'
   res.json({ message: 'Account unlocked' });
 });
 
+// Regenerate a student's temporary password and resend it.
+// Use this for: legacy students imported before random temp passwords existed
+// (password_hash is null), or students locked out / who lost their credentials.
+// Only allowed while the student hasn't completed their own password change yet.
+router.patch('/students/:id/regenerate-credentials', requireRole('super_admin', 'election_admin'), async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM students WHERE id = $1', [req.params.id]);
+    const student = rows[0];
+    if (!student) return res.status(404).json({ error: 'Student not found' });
+
+    if (!student.is_first_login) {
+      return res.status(400).json({
+        error: 'Student has already set their own password. Regenerating would lock them out — use "Unlock" instead if they are locked, or contact them directly.'
+      });
+    }
+
+    if (!student.school_email && !student.phone_number) {
+      return res.status(400).json({ error: 'Student has no email or phone on file to send credentials to' });
+    }
+
+    const tempPassword = generateTempPassword();
+    const passwordHash = await bcrypt.hash(tempPassword, parseInt(process.env.BCRYPT_ROUNDS) || 12);
+
+    await pool.query(
+      'UPDATE students SET password_hash = $1, account_locked = false, failed_login_attempts = 0 WHERE id = $2',
+      [passwordHash, student.id]
+    );
+
+    let sentVia = null;
+    if (student.school_email) {
+      await sendCredentialsEmail(student.school_email, student.full_name, student.reference_number, tempPassword, `${LOGIN_URL}/login`);
+      sentVia = 'email';
+    } else if (student.phone_number) {
+      await sendCredentialsSMS(student.phone_number, student.full_name, student.reference_number, tempPassword, `${LOGIN_URL}/login`);
+      sentVia = 'sms';
+    }
+
+    await auditService.log({
+      action: 'credentials_regenerated',
+      actorType: 'admin',
+      actorId: req.admin.id,
+      actorEmail: req.admin.email,
+      metadata: { studentId: student.id, studentName: student.full_name, sentVia },
+      ip: req.ip
+    });
+
+    res.json({ message: `New credentials sent to ${student.full_name} via ${sentVia}` });
+  } catch (err) {
+    logger.error('Regenerate credentials error:', err);
+    res.status(500).json({ error: 'Failed to regenerate credentials' });
+  }
+});
+
 router.patch('/students/:id/reset-otp', requireRole('super_admin', 'election_admin'), async (req, res) => {
   await pool.query('UPDATE students SET is_verified = false WHERE id = $1', [req.params.id]);
   res.json({ message: 'OTP verification reset. Student must re-verify.' });
@@ -819,6 +903,119 @@ router.delete('/elections/:electionId/students', requireRole('super_admin', 'ele
   } catch (err) {
     logger.error('Delete all students error:', err);
     res.status(500).json({ error: 'Failed to delete students' });
+  }
+});
+
+// ============================================================
+// BULK CREDENTIAL DISPATCH
+// For migrating/regenerating credentials for many students at once
+// (e.g. students whose password_hash is currently NULL, or a full
+// re-issue before an election). Complements, not replaces, the
+// single-student CSV-upload-time send and /regenerate-credentials
+// route above.
+// ============================================================
+
+// Queue credential generation + dual-channel send for every student in
+// the election who hasn't set their own password yet (is_first_login =
+// true). Safe to call repeatedly — students already queued or already
+// past first login are automatically skipped, never re-touched.
+router.post('/elections/:electionId/students/regenerate-credentials-bulk', requireRole('super_admin', 'election_admin'), async (req, res) => {
+  const { electionId } = req.params;
+  const { studentIds } = req.body; // optional — omit to target the whole election
+
+  try {
+    const result = await credentialDispatch.enqueueForElection({
+      electionId,
+      adminId: req.admin.id,
+      studentIds: Array.isArray(studentIds) ? studentIds : null
+    });
+
+    await auditService.log({
+      action: 'credentials_dispatched',
+      actorType: 'admin',
+      actorId: req.admin.id,
+      actorEmail: req.admin.email,
+      electionId,
+      metadata: { action: 'bulk_queue', ...result },
+      ip: req.ip
+    });
+
+    res.json({
+      message: `Queued ${result.queued} student(s) for credential dispatch`,
+      ...result
+    });
+  } catch (err) {
+    logger.error('Bulk regenerate credentials error:', err);
+    res.status(500).json({ error: 'Failed to queue credential dispatch' });
+  }
+});
+
+// Dashboard: per-student delivery status for an election.
+router.get('/elections/:electionId/credential-dispatch', async (req, res) => {
+  const { electionId } = req.params;
+  try {
+    const { rows } = await pool.query(
+      `SELECT cd.id, cd.student_id, s.full_name, s.reference_number,
+              s.school_email, s.phone_number,
+              cd.email_status, cd.email_error, cd.sms_status, cd.sms_error,
+              cd.sms_delivery_status, cd.sms_delivery_error, cd.sms_delivered_at,
+              cd.blocked_no_contact, cd.attempts, cd.created_at, cd.updated_at
+       FROM credential_dispatch cd
+       JOIN students s ON s.id = cd.student_id
+       WHERE cd.election_id = $1
+       ORDER BY cd.created_at DESC`,
+      [electionId]
+    );
+
+    const summary = rows.reduce((acc, r) => {
+      const resolved = r.email_status !== 'pending' && r.sms_status !== 'pending';
+      const anySent = r.email_status === 'sent' || r.sms_status === 'sent';
+      const anyFailed = r.email_status === 'failed' || r.sms_status === 'failed';
+      const smsUndelivered = r.sms_delivery_status === 'undelivered' || r.sms_delivery_status === 'failed';
+      if (r.blocked_no_contact) acc.blockedNoContact++;
+      else if (!resolved) acc.pending++;
+      else if (anyFailed && !anySent) acc.failed++;
+      else acc.delivered++;
+      if (smsUndelivered) acc.smsUndeliveredDespiteAccepted++;
+      return acc;
+    }, { pending: 0, delivered: 0, failed: 0, blockedNoContact: 0, smsUndeliveredDespiteAccepted: 0 });
+
+    res.json({ summary, students: rows });
+  } catch (err) {
+    logger.error('Credential dispatch dashboard error:', err);
+    res.status(500).json({ error: 'Failed to load credential dispatch status' });
+  }
+});
+
+// Requeue only the students/channels that failed. Does NOT touch students
+// still legitimately pending (already being worked by the background
+// worker) or students blocked on missing contact info (fix their contact
+// info via PATCH /students/:id/contact first, which naturally picks them
+// up on the next bulk call).
+router.post('/elections/:electionId/credential-dispatch/resend-failed', requireRole('super_admin', 'election_admin'), async (req, res) => {
+  const { electionId } = req.params;
+  const { studentIds } = req.body; // optional — omit to retry everyone failed
+
+  try {
+    const result = await credentialDispatch.resendFailed({
+      electionId,
+      studentIds: Array.isArray(studentIds) ? studentIds : null
+    });
+
+    await auditService.log({
+      action: 'credentials_dispatched',
+      actorType: 'admin',
+      actorId: req.admin.id,
+      actorEmail: req.admin.email,
+      electionId,
+      metadata: { action: 'resend_failed', ...result },
+      ip: req.ip
+    });
+
+    res.json({ message: `Requeued ${result.requeued} failed delivery attempt(s)`, ...result });
+  } catch (err) {
+    logger.error('Resend failed credentials error:', err);
+    res.status(500).json({ error: 'Failed to requeue failed deliveries' });
   }
 });
 

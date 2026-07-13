@@ -125,11 +125,28 @@ router.post('/cast', authenticateStudent, requireVerified, async (req, res) => {
     );
     const positionIds = new Set(validPositions.map(p => p.id));
 
-    for (const vote of votes) {
-      if (!positionIds.has(vote.positionId)) {
-        return res.status(400).json({ error: `Invalid position: ${vote.positionId}` });
-      }
+    // --- Ballot integrity checks ---
+    // Reject duplicate positionId entries (prevents stuffing multiple ballots
+    // for the same position in a single request)
+    const submittedPositionIds = votes.map(v => v.positionId);
+    const uniqueSubmittedPositionIds = new Set(submittedPositionIds);
+    if (uniqueSubmittedPositionIds.size !== submittedPositionIds.length) {
+      return res.status(400).json({ error: 'Duplicate position detected in submitted votes' });
+    }
 
+    // Require exactly one vote per position — no more, no fewer
+    if (votes.length !== positionIds.size) {
+      return res.status(400).json({ error: 'You must vote for every position exactly once' });
+    }
+
+    // Every submitted positionId must correspond to a real position in this election
+    for (const positionId of uniqueSubmittedPositionIds) {
+      if (!positionIds.has(positionId)) {
+        return res.status(400).json({ error: `Invalid position: ${positionId}` });
+      }
+    }
+
+    for (const vote of votes) {
       const { rows: candidateCheck } = await pool.query(
         'SELECT id FROM candidates WHERE id = $1 AND position_id = $2 AND election_id = $3 AND is_approved = true',
         [vote.candidateId, vote.positionId, req.student.election_id]

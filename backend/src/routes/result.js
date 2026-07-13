@@ -169,9 +169,27 @@ router.get('/:electionId', async (req, res) => {
 
 router.get('/:electionId/pdf', async (req, res) => {
   const { electionId } = req.params;
+  const token = req.headers.authorization?.replace('Bearer ', '');
 
   try {
     const { rows: [election] } = await pool.query('SELECT * FROM elections WHERE id = $1', [electionId]);
+    if (!election) return res.status(404).json({ error: 'Election not found' });
+
+    // Same rule as the JSON results route: admins can always view,
+    // students/anonymous users only after official release.
+    const jwt = require('jsonwebtoken');
+    let isAdmin = false;
+    try {
+      if (token) {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        isAdmin = decoded.type === 'admin';
+      }
+    } catch {}
+
+    if (!isAdmin && election.status !== 'results_published') {
+      return res.status(403).json({ error: 'Results have not been officially released yet' });
+    }
+
     const { rows: results } = await pool.query(`
       SELECT p.title as position, c.full_name as candidate,
         COUNT(b.id) as total_votes,
