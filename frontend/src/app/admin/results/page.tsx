@@ -98,18 +98,28 @@ export default function AdminResultsPage() {
           <div className="space-y-8">
             {results.positions?.map((position: any) => (
               <div key={position.id} className="card-glow p-6">
-                <h2 className="text-lg font-black uppercase tracking-widest mb-6 flex items-center gap-2"
+                <h2 className="text-lg font-black uppercase tracking-widest mb-4 flex items-center gap-2"
                   style={{ fontFamily: 'var(--font-orbitron)', color: '#00ff88' }}>
                   <Trophy className="w-5 h-5" />
                   {position.title}
                 </h2>
 
+                {position.hasTie && (
+                  <div className="mb-5 px-4 py-3 rounded-xl text-sm font-semibold flex items-center gap-2"
+                    style={{ background: 'rgba(255,170,0,0.08)', border: '1px solid rgba(255,170,0,0.3)', color: '#ffaa00' }}>
+                    ⚖️ Tie detected between {position.tiedCandidates?.join(' and ')} — Admin action required. A runoff or manual decision is needed for this position.
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   {/* Candidates list */}
                   <div className="space-y-3">
                     {position.candidates.map((c: any, i: number) => (
-                      <div key={c.id} className={`flex items-center gap-4 p-3 rounded-xl transition-all ${c.isWinner ? 'border border-primary-500/30' : ''}`}
-                        style={{ background: c.isWinner ? 'rgba(0,255,136,0.05)' : '#0f0f0f' }}>
+                      <div key={c.id} className={`flex items-center gap-4 p-3 rounded-xl transition-all ${c.isWinner ? 'border border-primary-500/30' : c.isTied ? 'border' : ''}`}
+                        style={{
+                          background: c.isWinner ? 'rgba(0,255,136,0.05)' : c.isTied ? 'rgba(255,170,0,0.04)' : '#0f0f0f',
+                          borderColor: c.isTied && !c.isWinner ? 'rgba(255,170,0,0.3)' : undefined
+                        }}>
                         <div className="w-12 h-12 rounded-full overflow-hidden bg-dark-400 flex-shrink-0">
                           {c.imageUrl ? (
                             <img src={c.imageUrl} alt={c.fullName} className="w-full h-full object-cover" />
@@ -127,7 +137,14 @@ export default function AdminResultsPage() {
                                 {c.isWinner ? 'ELECTED ✓' : 'NOT ELECTED ✗'}
                               </span>
                             ) : (
-                              c.isWinner && <span className="badge badge-active text-xs">Winner</span>
+                              <>
+                                {c.isWinner && !c.isTied && <span className="badge badge-active text-xs">Winner 🏆</span>}
+                                {c.isTied && (
+                                  <span className="badge text-xs" style={{ background: 'rgba(255,170,0,0.15)', color: '#ffaa00', border: '1px solid rgba(255,170,0,0.3)' }}>
+                                    Tied — Runoff Required ⚖️
+                                  </span>
+                                )}
+                              </>
                             )}
                           </div>
                           <p className="text-xs text-dark-700">{c.program}</p>
@@ -157,7 +174,7 @@ export default function AdminResultsPage() {
                           )}
                         </div>
                         <div className="text-right flex-shrink-0">
-                          <p className="font-mono font-bold text-lg" style={{ color: '#00ff88' }}>
+                          <p className="font-mono font-bold text-lg" style={{ color: c.isTied ? '#ffaa00' : '#00ff88' }}>
                             {c.isYesNoVote ? c.yesVotes : c.votes}
                           </p>
                           <p className="text-xs text-dark-700">{c.percentage}%</p>
