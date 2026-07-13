@@ -274,6 +274,55 @@ CREATE TRIGGER trg_students_updated BEFORE UPDATE ON students FOR EACH ROW EXECU
 CREATE TRIGGER trg_candidates_updated BEFORE UPDATE ON candidates FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
 -- ============================================================
+-- CREDENTIAL DISPATCH (bulk temp-password generation + delivery queue)
+-- Backs services/credentialDispatch.js — bulk regenerate-credentials,
+-- the per-student delivery status dashboard, and the Twilio delivery
+-- status webhook.
+-- ============================================================
+
+CREATE TABLE credential_dispatch (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  student_id UUID REFERENCES students(id) ON DELETE CASCADE NOT NULL,
+  election_id UUID REFERENCES elections(id) ON DELETE CASCADE NOT NULL,
+  requested_by UUID REFERENCES admins(id) NOT NULL,
+
+  -- Held only until both channels resolve, so a retry of one channel never
+  -- mints a second, different password than the one the other channel sent.
+  pending_plaintext TEXT,
+
+  email_status VARCHAR(20) NOT NULL DEFAULT 'pending', -- pending | sent | failed | skipped
+  email_error TEXT,
+
+  sms_status VARCHAR(20) NOT NULL DEFAULT 'pending', -- pending | sent | failed | skipped
+  sms_error TEXT,
+  sms_message_sid VARCHAR(64),
+  sms_delivery_status VARCHAR(20), -- null until Twilio's webhook reports queued/sent/delivered/undelivered/failed
+  sms_delivery_error TEXT,
+  sms_delivered_at TIMESTAMPTZ,
+
+  blocked_no_contact BOOLEAN NOT NULL DEFAULT false, -- true when student has neither email nor phone on file
+  attempts INTEGER NOT NULL DEFAULT 0,
+
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Required by enqueueForElection's ON CONFLICT clause: Postgres needs an
+-- index whose definition exactly matches the conflict target, predicate
+-- included, or the INSERT ... ON CONFLICT ... DO NOTHING will error out.
+-- This also IS the mechanism that makes enqueueing idempotent — a student
+-- already mid-flight (still pending on either channel) can't get a second
+-- row queued alongside the first.
+CREATE UNIQUE INDEX idx_credential_dispatch_one_active_per_student
+  ON credential_dispatch(student_id)
+  WHERE blocked_no_contact = false AND (email_status = 'pending' OR sms_status = 'pending');
+
+CREATE INDEX idx_credential_dispatch_election ON credential_dispatch(election_id);
+CREATE INDEX idx_credential_dispatch_sms_sid ON credential_dispatch(sms_message_sid) WHERE sms_message_sid IS NOT NULL;
+
+CREATE TRIGGER trg_credential_dispatch_updated BEFORE UPDATE ON credential_dispatch FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+-- ============================================================
 -- SEED: Default Super Admin (password: Admin@2025!)
 -- ============================================================
 

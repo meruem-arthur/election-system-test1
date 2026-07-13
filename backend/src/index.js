@@ -87,6 +87,8 @@ const voteRoutes = require('./routes/vote');
 const resultRoutes = require('./routes/result');
 const supportRoutes = require('./routes/support');
 const auditRoutes = require('./routes/audit');
+const webhookRoutes = require('./routes/webhooks');
+const credentialDispatch = require('./services/credentialDispatch');
 
 app.use('/api/auth', loginLimiter, authRoutes);
 app.use('/api/admin', adminRoutes);
@@ -97,6 +99,7 @@ app.use('/api/vote', voteRoutes);
 app.use('/api/results', resultRoutes);
 app.use('/api/support', supportRoutes);
 app.use('/api/audit', auditRoutes);
+app.use('/api/webhooks', webhookRoutes);
 
 // Health check — always responds, never rate limited
 app.get('/api/health', (req, res) => {
@@ -130,6 +133,10 @@ async function startServer() {
       logger.info(`🚀 Election System API running on port ${PORT}`);
       logger.info(`   Environment: ${process.env.NODE_ENV}`);
     });
+    // Keeps processing queued credential dispatch rows beyond whatever the
+    // first batch (BATCH_SIZE=15) catches on enqueue — without this, any
+    // cohort larger than 15 silently stalls after the first tick.
+    credentialDispatch.startWorker();
   } catch (err) {
     logger.error('❌ Failed to start server:', err);
     process.exit(1);

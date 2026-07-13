@@ -19,7 +19,7 @@ const logger = require('../utils/logger');
 // produce — so it can't be spoofed by a third party hitting this URL.
 // ============================================================
 
-router.post('/twilio/sms-status', express.urlencoded({ extended: false }), async (req, res) => {
+router.post('/twilio/sms-status', async (req, res) => {
   // Always ack quickly regardless of outcome below — Twilio retries
   // aggressively on non-2xx, and we don't want it hammering this endpoint
   // over something like an unrecognized SID.
