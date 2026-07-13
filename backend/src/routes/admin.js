@@ -5,7 +5,10 @@ const { parse } = require('csv-parse');
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const { pool, withTransaction } = require('../config/database');
-const { authenticateAdmin, requireRole } = require('../middleware/auth');
+const {
+  authenticateAdmin, requireRole, requireElectionAccess,
+  electionIdFromCandidate, electionIdFromPosition, electionIdFromStudent
+} = require('../middleware/auth');
 const cloudinary = require('../config/cloudinary');
 const auditService = require('../services/audit');
 const logger = require('../utils/logger');
@@ -26,7 +29,7 @@ router.use(authenticateAdmin);
 // DASHBOARD STATISTICS
 // ============================================================
 
-router.get('/dashboard/:electionId', async (req, res) => {
+router.get('/dashboard/:electionId', requireElectionAccess('electionId'), async (req, res) => {
   const { electionId } = req.params;
   try {
     const [electionRes, statsRes, turnoutByLevelRes, candidateVotesRes] = await Promise.all([
@@ -76,14 +79,20 @@ router.get('/dashboard/:electionId', async (req, res) => {
 // ============================================================
 
 router.get('/elections', async (req, res) => {
+  const isSuperAdmin = req.admin.role === 'super_admin';
   const { rows } = await pool.query(
-    'SELECT e.*, a.full_name as created_by_name FROM elections e LEFT JOIN admins a ON a.id = e.created_by ORDER BY e.created_at DESC'
+    `SELECT e.*, a.full_name as created_by_name
+     FROM elections e
+     LEFT JOIN admins a ON a.id = e.created_by
+     ${isSuperAdmin ? '' : 'JOIN admin_election_assignments aea ON aea.election_id = e.id AND aea.admin_id = $1'}
+     ORDER BY e.created_at DESC`,
+    isSuperAdmin ? [] : [req.admin.id]
   );
   res.json(rows);
 });
 
-router.post('/elections', requireRole('super_admin', 'election_admin'), async (req, res) => {
-  const { title, description, department, academicYear, startTime, endTime } = req.body;
+router.post('/elections', requireRole('super_admin'), async (req, res) => {
+  const { title, description, department, academicYear, startTime, endTime, adminIds } = req.body;
   if (!title || !department || !academicYear) {
     return res.status(400).json({ error: 'Title, department, and academic year are required' });
   }
@@ -94,6 +103,17 @@ router.post('/elections', requireRole('super_admin', 'election_admin'), async (r
        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
       [title, description, department, academicYear, startTime, endTime, req.admin.id]
     );
+
+    // Optionally assign one or more departmental admins to this election right away
+    if (Array.isArray(adminIds) && adminIds.length > 0) {
+      for (const adminId of adminIds) {
+        await pool.query(
+          `INSERT INTO admin_election_assignments (admin_id, election_id, assigned_by)
+           VALUES ($1, $2, $3) ON CONFLICT (admin_id, election_id) DO NOTHING`,
+          [adminId, rows[0].id, req.admin.id]
+        );
+      }
+    }
 
     await auditService.log({
       action: 'election_created',
@@ -111,7 +131,7 @@ router.post('/elections', requireRole('super_admin', 'election_admin'), async (r
   }
 });
 
-router.patch('/elections/:id/status', requireRole('super_admin', 'election_admin'), async (req, res) => {
+router.patch('/elections/:id/status', requireRole('super_admin', 'election_admin'), requireElectionAccess('id'), async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
   const validStatuses = ['active', 'paused', 'ended', 'results_published'];
@@ -171,7 +191,7 @@ router.delete('/elections', requireRole('super_admin'), async (req, res) => {
 });
 
 // Delete single election
-router.delete('/elections/:id', requireRole('super_admin', 'election_admin'), async (req, res) => {
+router.delete('/elections/:id', requireRole('super_admin'), async (req, res) => {
   const { id } = req.params;
   try {
     const { rows } = await pool.query('SELECT id, title FROM elections WHERE id = $1', [id]);
@@ -196,36 +216,12 @@ router.delete('/elections/:id', requireRole('super_admin', 'election_admin'), as
   }
 });
 
-// Delete ALL elections — clears every related record first
-router.delete('/elections', requireRole('super_admin', 'election_admin'), async (req, res) => {
-  try {
-    const { rows } = await pool.query('SELECT id FROM elections');
-    if (rows.length === 0) return res.json({ message: 'No elections to delete', count: 0 });
-
-    // Delete in correct order to avoid foreign key violations
-    await pool.query('DELETE FROM audit_logs WHERE election_id IS NOT NULL');
-    await pool.query('DELETE FROM voter_status');
-    await pool.query('DELETE FROM ballots');
-    await pool.query('DELETE FROM otp_codes WHERE student_id IN (SELECT id FROM students)');
-    await pool.query('DELETE FROM support_tickets WHERE election_id IS NOT NULL');
-    await pool.query('DELETE FROM csv_batches');
-    await pool.query('DELETE FROM students');
-    await pool.query('DELETE FROM candidates');
-    await pool.query('DELETE FROM positions');
-    await pool.query('DELETE FROM elections');
-
-    res.json({ message: `All ${rows.length} election(s) and related data deleted successfully`, count: rows.length });
-  } catch (err) {
-    logger.error('Delete all elections error:', err);
-    res.status(500).json({ error: 'Failed to delete all elections: ' + err.message });
-  }
-});
 
 // ============================================================
 // CSV STUDENT UPLOAD
 // ============================================================
 
-router.post('/elections/:electionId/students/upload', requireRole('super_admin', 'election_admin'), upload.single('csv'), async (req, res) => {
+router.post('/elections/:electionId/students/upload', requireRole('super_admin', 'election_admin'), requireElectionAccess('electionId'), upload.single('csv'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'CSV file required' });
 
   const { electionId } = req.params;
@@ -359,7 +355,7 @@ router.post('/elections/:electionId/students/upload', requireRole('super_admin',
 // STUDENT LIST
 // ============================================================
 
-router.get('/elections/:electionId/students', async (req, res) => {
+router.get('/elections/:electionId/students', requireElectionAccess('electionId'), async (req, res) => {
   const { electionId } = req.params;
   const { page = 1, limit = 50, search, hasVoted, level } = req.query;
   const offset = (page - 1) * limit;
@@ -403,7 +399,7 @@ router.get('/elections/:electionId/students', async (req, res) => {
 // CANDIDATE MANAGEMENT
 // ============================================================
 
-router.get('/elections/:electionId/candidates', async (req, res) => {
+router.get('/elections/:electionId/candidates', requireElectionAccess('electionId'), async (req, res) => {
   const { rows } = await pool.query(
     `SELECT c.*, p.title as position_title FROM candidates c
      JOIN positions p ON p.id = c.position_id
@@ -413,7 +409,7 @@ router.get('/elections/:electionId/candidates', async (req, res) => {
   res.json(rows);
 });
 
-router.post('/elections/:electionId/candidates', requireRole('super_admin', 'election_admin'), upload.single('image'), async (req, res) => {
+router.post('/elections/:electionId/candidates', requireRole('super_admin', 'election_admin'), requireElectionAccess('electionId'), upload.single('image'), async (req, res) => {
   const { electionId } = req.params;
   const { fullName, indexNumber, program, level, bio, positionId, displayOrder } = req.body;
 
@@ -456,7 +452,7 @@ router.post('/elections/:electionId/candidates', requireRole('super_admin', 'ele
 });
 
 // Edit candidate
-router.put('/candidates/:id', requireRole('super_admin', 'election_admin'), upload.single('image'), async (req, res) => {
+router.put('/candidates/:id', requireRole('super_admin', 'election_admin'), requireElectionAccess(electionIdFromCandidate), upload.single('image'), async (req, res) => {
   const { id } = req.params;
   const { fullName, indexNumber, program, level, bio, positionId, displayOrder } = req.body;
 
@@ -516,7 +512,7 @@ router.put('/candidates/:id', requireRole('super_admin', 'election_admin'), uplo
 });
 
 // Delete candidate
-router.delete('/candidates/:id', requireRole('super_admin', 'election_admin'), async (req, res) => {
+router.delete('/candidates/:id', requireRole('super_admin', 'election_admin'), requireElectionAccess(electionIdFromCandidate), async (req, res) => {
   const { id } = req.params;
   try {
     const { rows } = await pool.query('SELECT id, full_name, image_public_id FROM candidates WHERE id = $1', [id]);
@@ -551,7 +547,7 @@ router.delete('/candidates/:id', requireRole('super_admin', 'election_admin'), a
   }
 });
 
-router.patch('/candidates/:id/approve', requireRole('super_admin', 'election_admin'), async (req, res) => {
+router.patch('/candidates/:id/approve', requireRole('super_admin', 'election_admin'), requireElectionAccess(electionIdFromCandidate), async (req, res) => {
   const { rows } = await pool.query(
     'UPDATE candidates SET is_approved = true, approved_by = $1, approved_at = NOW() WHERE id = $2 RETURNING *',
     [req.admin.id, req.params.id]
@@ -572,7 +568,7 @@ router.patch('/candidates/:id/approve', requireRole('super_admin', 'election_adm
 // POSITIONS
 // ============================================================
 
-router.get('/elections/:electionId/positions', async (req, res) => {
+router.get('/elections/:electionId/positions', requireElectionAccess('electionId'), async (req, res) => {
   const { rows } = await pool.query(
     'SELECT * FROM positions WHERE election_id = $1 ORDER BY display_order',
     [req.params.electionId]
@@ -580,7 +576,7 @@ router.get('/elections/:electionId/positions', async (req, res) => {
   res.json(rows);
 });
 
-router.post('/elections/:electionId/positions', requireRole('super_admin', 'election_admin'), async (req, res) => {
+router.post('/elections/:electionId/positions', requireRole('super_admin', 'election_admin'), requireElectionAccess('electionId'), async (req, res) => {
   const { title, description, displayOrder } = req.body;
   if (!title) return res.status(400).json({ error: 'Position title required' });
 
@@ -592,7 +588,7 @@ router.post('/elections/:electionId/positions', requireRole('super_admin', 'elec
 });
 
 // Edit position
-router.put('/positions/:id', requireRole('super_admin', 'election_admin'), async (req, res) => {
+router.put('/positions/:id', requireRole('super_admin', 'election_admin'), requireElectionAccess(electionIdFromPosition), async (req, res) => {
   const { id } = req.params;
   const { title, description, displayOrder } = req.body;
   if (!title) return res.status(400).json({ error: 'Position title required' });
@@ -611,7 +607,7 @@ router.put('/positions/:id', requireRole('super_admin', 'election_admin'), async
 });
 
 // Delete position
-router.delete('/positions/:id', requireRole('super_admin', 'election_admin'), async (req, res) => {
+router.delete('/positions/:id', requireRole('super_admin', 'election_admin'), requireElectionAccess(electionIdFromPosition), async (req, res) => {
   const { id } = req.params;
   try {
     // Check if position has candidates
@@ -653,7 +649,110 @@ router.post('/admins', requireRole('super_admin'), async (req, res) => {
 });
 
 router.get('/admins', requireRole('super_admin'), async (req, res) => {
-  const { rows } = await pool.query('SELECT id, email, full_name, role, is_active, last_login, created_at FROM admins ORDER BY created_at');
+  const { rows } = await pool.query(`
+    SELECT a.id, a.email, a.full_name, a.role, a.is_active, a.last_login, a.created_at,
+      COALESCE(
+        json_agg(json_build_object('id', e.id, 'title', e.title)) FILTER (WHERE e.id IS NOT NULL),
+        '[]'::json
+      ) as assigned_elections
+    FROM admins a
+    LEFT JOIN admin_election_assignments aea ON aea.admin_id = a.id
+    LEFT JOIN elections e ON e.id = aea.election_id
+    GROUP BY a.id
+    ORDER BY a.created_at
+  `);
+  res.json(rows);
+});
+
+// ============================================================
+// ADMIN <-> ELECTION ASSIGNMENTS
+// super_admin has full access everywhere by default and never needs a row
+// here. election_admin / observer only see/manage elections they've been
+// explicitly assigned to below.
+// ============================================================
+
+router.post('/admins/:adminId/elections/:electionId', requireRole('super_admin'), async (req, res) => {
+  const { adminId, electionId } = req.params;
+  try {
+    const { rows: adminRows } = await pool.query('SELECT id, role FROM admins WHERE id = $1', [adminId]);
+    if (!adminRows[0]) return res.status(404).json({ error: 'Admin not found' });
+    if (adminRows[0].role === 'super_admin') {
+      return res.status(400).json({ error: 'super_admin already has access to every election — no assignment needed' });
+    }
+
+    const { rows: electionRows } = await pool.query('SELECT id, title FROM elections WHERE id = $1', [electionId]);
+    if (!electionRows[0]) return res.status(404).json({ error: 'Election not found' });
+
+    await pool.query(
+      `INSERT INTO admin_election_assignments (admin_id, election_id, assigned_by)
+       VALUES ($1, $2, $3) ON CONFLICT (admin_id, election_id) DO NOTHING`,
+      [adminId, electionId, req.admin.id]
+    );
+
+    await auditService.log({
+      action: 'admin_election_assigned',
+      actorType: 'admin',
+      actorId: req.admin.id,
+      actorEmail: req.admin.email,
+      electionId,
+      metadata: { assignedAdminId: adminId },
+      ip: req.ip
+    });
+
+    res.json({ message: `Assigned admin to election "${electionRows[0].title}"` });
+  } catch (err) {
+    logger.error('Assign admin to election error:', err);
+    res.status(500).json({ error: 'Failed to assign admin to election' });
+  }
+});
+
+router.delete('/admins/:adminId/elections/:electionId', requireRole('super_admin'), async (req, res) => {
+  const { adminId, electionId } = req.params;
+  try {
+    const { rowCount } = await pool.query(
+      'DELETE FROM admin_election_assignments WHERE admin_id = $1 AND election_id = $2',
+      [adminId, electionId]
+    );
+    if (rowCount === 0) return res.status(404).json({ error: 'Assignment not found' });
+
+    await auditService.log({
+      action: 'admin_election_unassigned',
+      actorType: 'admin',
+      actorId: req.admin.id,
+      actorEmail: req.admin.email,
+      electionId,
+      metadata: { unassignedAdminId: adminId },
+      ip: req.ip
+    });
+
+    res.json({ message: 'Admin unassigned from election' });
+  } catch (err) {
+    logger.error('Unassign admin from election error:', err);
+    res.status(500).json({ error: 'Failed to unassign admin from election' });
+  }
+});
+
+router.get('/admins/:adminId/elections', requireRole('super_admin'), async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT e.id, e.title, e.department, e.academic_year, e.status
+     FROM admin_election_assignments aea
+     JOIN elections e ON e.id = aea.election_id
+     WHERE aea.admin_id = $1
+     ORDER BY e.created_at DESC`,
+    [req.params.adminId]
+  );
+  res.json(rows);
+});
+
+router.get('/elections/:electionId/admins', requireRole('super_admin'), async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT a.id, a.email, a.full_name, a.role
+     FROM admin_election_assignments aea
+     JOIN admins a ON a.id = aea.admin_id
+     WHERE aea.election_id = $1
+     ORDER BY a.full_name`,
+    [req.params.electionId]
+  );
   res.json(rows);
 });
 
@@ -661,7 +760,7 @@ router.get('/admins', requireRole('super_admin'), async (req, res) => {
 // STUDENT ACCOUNT ACTIONS
 // ============================================================
 
-router.patch('/students/:id/unlock', requireRole('super_admin', 'election_admin'), async (req, res) => {
+router.patch('/students/:id/unlock', requireRole('super_admin', 'election_admin'), requireElectionAccess(electionIdFromStudent), async (req, res) => {
   await pool.query('UPDATE students SET account_locked = false, failed_login_attempts = 0 WHERE id = $1', [req.params.id]);
   res.json({ message: 'Account unlocked' });
 });
@@ -670,7 +769,7 @@ router.patch('/students/:id/unlock', requireRole('super_admin', 'election_admin'
 // Use this for: legacy students imported before random temp passwords existed
 // (password_hash is null), or students locked out / who lost their credentials.
 // Only allowed while the student hasn't completed their own password change yet.
-router.patch('/students/:id/regenerate-credentials', requireRole('super_admin', 'election_admin'), async (req, res) => {
+router.patch('/students/:id/regenerate-credentials', requireRole('super_admin', 'election_admin'), requireElectionAccess(electionIdFromStudent), async (req, res) => {
   try {
     const { rows } = await pool.query('SELECT * FROM students WHERE id = $1', [req.params.id]);
     const student = rows[0];
@@ -719,13 +818,13 @@ router.patch('/students/:id/regenerate-credentials', requireRole('super_admin', 
   }
 });
 
-router.patch('/students/:id/reset-otp', requireRole('super_admin', 'election_admin'), async (req, res) => {
+router.patch('/students/:id/reset-otp', requireRole('super_admin', 'election_admin'), requireElectionAccess(electionIdFromStudent), async (req, res) => {
   await pool.query('UPDATE students SET is_verified = false WHERE id = $1', [req.params.id]);
   res.json({ message: 'OTP verification reset. Student must re-verify.' });
 });
 
 // Alias — /verify does the same as /approve
-router.patch('/students/:id/verify', requireRole('super_admin', 'election_admin'), async (req, res) => {
+router.patch('/students/:id/verify', requireRole('super_admin', 'election_admin'), requireElectionAccess(electionIdFromStudent), async (req, res) => {
   try {
     const { rows } = await pool.query(
       'UPDATE students SET is_verified = true WHERE id = $1 RETURNING id, full_name, reference_number',
@@ -748,7 +847,7 @@ router.patch('/students/:id/verify', requireRole('super_admin', 'election_admin'
 });
 
 // Manually approve a student (bypass OTP) — admin verified identity in person
-router.patch('/students/:id/approve', requireRole('super_admin', 'election_admin'), async (req, res) => {
+router.patch('/students/:id/approve', requireRole('super_admin', 'election_admin'), requireElectionAccess(electionIdFromStudent), async (req, res) => {
   try {
     const { rows } = await pool.query(
       'UPDATE students SET is_verified = true WHERE id = $1 RETURNING id, full_name, reference_number',
@@ -778,7 +877,7 @@ router.patch('/students/:id/approve', requireRole('super_admin', 'election_admin
 });
 
 // Update student contact details (email / phone) — then optionally resend OTP
-router.patch('/students/:id/contact', requireRole('super_admin', 'election_admin'), async (req, res) => {
+router.patch('/students/:id/contact', requireRole('super_admin', 'election_admin'), requireElectionAccess(electionIdFromStudent), async (req, res) => {
   const { phoneNumber, schoolEmail } = req.body;
   if (!phoneNumber && !schoolEmail) {
     return res.status(400).json({ error: 'Provide at least a phone number or email' });
@@ -845,7 +944,7 @@ router.patch('/students/:id/contact', requireRole('super_admin', 'election_admin
 });
 
 // Delete a single student
-router.delete('/students/:id', requireRole('super_admin', 'election_admin'), async (req, res) => {
+router.delete('/students/:id', requireRole('super_admin', 'election_admin'), requireElectionAccess(electionIdFromStudent), async (req, res) => {
   try {
     const { rows } = await pool.query('SELECT id, full_name FROM students WHERE id = $1', [req.params.id]);
     if (!rows[0]) return res.status(404).json({ error: 'Student not found' });
@@ -873,7 +972,7 @@ router.delete('/students/:id', requireRole('super_admin', 'election_admin'), asy
 });
 
 // Delete ALL students in an election
-router.delete('/elections/:electionId/students', requireRole('super_admin', 'election_admin'), async (req, res) => {
+router.delete('/elections/:electionId/students', requireRole('super_admin', 'election_admin'), requireElectionAccess('electionId'), async (req, res) => {
   const { electionId } = req.params;
   try {
     // Get all student IDs for this election
@@ -919,7 +1018,7 @@ router.delete('/elections/:electionId/students', requireRole('super_admin', 'ele
 // the election who hasn't set their own password yet (is_first_login =
 // true). Safe to call repeatedly — students already queued or already
 // past first login are automatically skipped, never re-touched.
-router.post('/elections/:electionId/students/regenerate-credentials-bulk', requireRole('super_admin', 'election_admin'), async (req, res) => {
+router.post('/elections/:electionId/students/regenerate-credentials-bulk', requireRole('super_admin', 'election_admin'), requireElectionAccess('electionId'), async (req, res) => {
   const { electionId } = req.params;
   const { studentIds } = req.body; // optional — omit to target the whole election
 
@@ -951,7 +1050,7 @@ router.post('/elections/:electionId/students/regenerate-credentials-bulk', requi
 });
 
 // Dashboard: per-student delivery status for an election.
-router.get('/elections/:electionId/credential-dispatch', async (req, res) => {
+router.get('/elections/:electionId/credential-dispatch', requireElectionAccess('electionId'), async (req, res) => {
   const { electionId } = req.params;
   try {
     const { rows } = await pool.query(
@@ -992,7 +1091,7 @@ router.get('/elections/:electionId/credential-dispatch', async (req, res) => {
 // worker) or students blocked on missing contact info (fix their contact
 // info via PATCH /students/:id/contact first, which naturally picks them
 // up on the next bulk call).
-router.post('/elections/:electionId/credential-dispatch/resend-failed', requireRole('super_admin', 'election_admin'), async (req, res) => {
+router.post('/elections/:electionId/credential-dispatch/resend-failed', requireRole('super_admin', 'election_admin'), requireElectionAccess('electionId'), async (req, res) => {
   const { electionId } = req.params;
   const { studentIds } = req.body; // optional — omit to retry everyone failed
 

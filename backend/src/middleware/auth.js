@@ -74,6 +74,68 @@ function requireVerified(req, res, next) {
   next();
 }
 
+// ============================================================
+// ELECTION SCOPING
+// super_admin always has full access to every election.
+// election_admin / observer are restricted to elections they've been
+// explicitly assigned via admin_election_assignments.
+// ============================================================
+
+// resolveElectionId is either:
+//   - a string: the name of the route param that IS the election id
+//     (e.g. 'electionId' for routes like /elections/:electionId/students)
+//   - a function: async (req) => electionId, for routes where the param
+//     refers to some other resource (a candidate/position/student id)
+//     whose election_id has to be looked up first
+function requireElectionAccess(resolveElectionId) {
+  return async (req, res, next) => {
+    try {
+      if (!req.admin) return res.status(401).json({ error: 'Not authenticated' });
+
+      if (req.admin.role === 'super_admin') return next();
+
+      const electionId = typeof resolveElectionId === 'function'
+        ? await resolveElectionId(req)
+        : req.params[resolveElectionId];
+
+      if (!electionId) {
+        return res.status(404).json({ error: 'Resource not found' });
+      }
+
+      const { rows } = await pool.query(
+        'SELECT 1 FROM admin_election_assignments WHERE admin_id = $1 AND election_id = $2',
+        [req.admin.id, electionId]
+      );
+
+      if (rows.length === 0) {
+        return res.status(403).json({ error: 'You are not assigned to this election' });
+      }
+
+      req.scopedElectionId = electionId;
+      next();
+    } catch (err) {
+      return res.status(500).json({ error: 'Failed to verify election access' });
+    }
+  };
+}
+
+// Resource -> election_id lookups, for use as requireElectionAccess(...) args
+// on routes where :id refers to the resource, not the election directly.
+async function electionIdFromCandidate(req) {
+  const { rows } = await pool.query('SELECT election_id FROM candidates WHERE id = $1', [req.params.id]);
+  return rows[0]?.election_id || null;
+}
+
+async function electionIdFromPosition(req) {
+  const { rows } = await pool.query('SELECT election_id FROM positions WHERE id = $1', [req.params.id]);
+  return rows[0]?.election_id || null;
+}
+
+async function electionIdFromStudent(req) {
+  const { rows } = await pool.query('SELECT election_id FROM students WHERE id = $1', [req.params.id]);
+  return rows[0]?.election_id || null;
+}
+
 function extractToken(req) {
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -86,5 +148,9 @@ module.exports = {
   authenticateStudent,
   authenticateAdmin,
   requireRole,
-  requireVerified
+  requireVerified,
+  requireElectionAccess,
+  electionIdFromCandidate,
+  electionIdFromPosition,
+  electionIdFromStudent
 };

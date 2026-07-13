@@ -17,7 +17,8 @@ CREATE TYPE audit_action AS ENUM (
   'login', 'logout', 'vote_cast', 'election_created', 'election_started',
   'election_stopped', 'csv_uploaded', 'candidate_added', 'candidate_approved',
   'results_published', 'password_changed', 'otp_verified', 'admin_created',
-  'suspicious_login', 'vote_attempt_duplicate'
+  'suspicious_login', 'vote_attempt_duplicate', 'credentials_dispatched',
+  'credentials_regenerated', 'admin_election_assigned', 'admin_election_unassigned'
 );
 
 -- ============================================================
@@ -321,6 +322,27 @@ CREATE INDEX idx_credential_dispatch_election ON credential_dispatch(election_id
 CREATE INDEX idx_credential_dispatch_sms_sid ON credential_dispatch(sms_message_sid) WHERE sms_message_sid IS NOT NULL;
 
 CREATE TRIGGER trg_credential_dispatch_updated BEFORE UPDATE ON credential_dispatch FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+-- ============================================================
+-- ADMIN ELECTION ASSIGNMENTS
+-- Scopes non-super_admin admins (election_admin, observer) to only the
+-- specific election(s) they've been assigned to. super_admin bypasses
+-- this entirely and always has full access — no row needed for them.
+-- Many-to-many: one admin can be assigned to several elections over time
+-- (e.g. running both this year's and next year's departmental election).
+-- ============================================================
+
+CREATE TABLE admin_election_assignments (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  admin_id UUID REFERENCES admins(id) ON DELETE CASCADE NOT NULL,
+  election_id UUID REFERENCES elections(id) ON DELETE CASCADE NOT NULL,
+  assigned_by UUID REFERENCES admins(id),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(admin_id, election_id)
+);
+
+CREATE INDEX idx_admin_election_assignments_admin ON admin_election_assignments(admin_id);
+CREATE INDEX idx_admin_election_assignments_election ON admin_election_assignments(election_id);
 
 -- ============================================================
 -- SEED: Default Super Admin (password: Admin@2025!)
