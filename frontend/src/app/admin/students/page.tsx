@@ -3,8 +3,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { adminAPI } from '@/lib/api';
 import toast from 'react-hot-toast';
 import { useDropzone } from 'react-dropzone';
-import { Upload, Search, Users, CheckCircle, XCircle, ChevronLeft, ChevronRight, Unlock, RefreshCw, Trash2, Pencil } from 'lucide-react';
+import { Upload, Search, Users, CheckCircle, XCircle, ChevronLeft, ChevronRight, Unlock, RefreshCw, Trash2, Pencil, Send } from 'lucide-react';
 import AdminLayout from '@/components/AdminLayout';
+import Link from 'next/link';
 
 export default function AdminStudentsPage() {
   const [elections, setElections] = useState<any[]>([]);
@@ -166,14 +167,22 @@ export default function AdminStudentsPage() {
           </h1>
           <p className="text-dark-800 text-sm mt-1">Upload and manage verified student records</p>
         </div>
-        {total > 0 && (
-          <button
-            onClick={() => setConfirmDeleteAll(true)}
-            className="btn-danger py-2 px-4 text-sm flex items-center gap-2"
+        <div className="flex gap-2">
+          <Link
+            href="/admin/credentials"
+            className="btn-secondary py-2 px-4 text-sm flex items-center gap-2"
           >
-            <Trash2 className="w-4 h-4" /> Delete All Students
-          </button>
-        )}
+            <Send className="w-4 h-4" /> Credential Dispatch Status
+          </Link>
+          {total > 0 && (
+            <button
+              onClick={() => setConfirmDeleteAll(true)}
+              className="btn-danger py-2 px-4 text-sm flex items-center gap-2"
+            >
+              <Trash2 className="w-4 h-4" /> Delete All Students
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Election selector */}

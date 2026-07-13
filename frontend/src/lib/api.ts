@@ -164,6 +164,28 @@ export const adminAPI = {
 };
 
 // ============================================================
+// CREDENTIAL DISPATCH API
+// ============================================================
+
+export const credentialDispatchAPI = {
+  // Queue credential generation + send for students who haven't set a
+  // password yet. Omit studentIds to target the whole election.
+  regenerateBulk: (electionId: string, studentIds?: string[]) =>
+    api.post(`/admin/elections/${electionId}/students/regenerate-credentials-bulk`, {
+      studentIds: studentIds && studentIds.length > 0 ? studentIds : undefined,
+    }),
+
+  getStatus: (electionId: string) =>
+    api.get(`/admin/elections/${electionId}/credential-dispatch`),
+
+  // Omit studentIds to retry everyone currently failed.
+  resendFailed: (electionId: string, studentIds?: string[]) =>
+    api.post(`/admin/elections/${electionId}/credential-dispatch/resend-failed`, {
+      studentIds: studentIds && studentIds.length > 0 ? studentIds : undefined,
+    }),
+};
+
+// ============================================================
 // RESULTS API
 // ============================================================
 

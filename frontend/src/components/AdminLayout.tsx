@@ -5,13 +5,14 @@ import Link from 'next/link';
 import {
   LayoutDashboard, Users, Vote, UserCheck, BarChart2,
   FileText, Settings, LogOut, Menu, X, Zap, Shield,
-  ClipboardList, HelpCircle, ChevronRight
+  ClipboardList, HelpCircle, ChevronRight, Send
 } from 'lucide-react';
 
 const navItems = [
   { href: '/admin/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { href: '/admin/elections', icon: Vote, label: 'Elections' },
   { href: '/admin/students', icon: Users, label: 'Students' },
+  { href: '/admin/credentials', icon: Send, label: 'Credentials' },
   { href: '/admin/candidates', icon: UserCheck, label: 'Candidates' },
   { href: '/admin/results', icon: BarChart2, label: 'Results' },
   { href: '/admin/audit', icon: ClipboardList, label: 'Audit Logs' },
