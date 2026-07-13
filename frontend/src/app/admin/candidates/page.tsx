@@ -110,9 +110,30 @@ export default function AdminCandidatesPage() {
 
   // ---- CANDIDATE ACTIONS ----
 
+  const nextBallotNumber = (positionId: string) => {
+    const positionCandidates = candidates.filter(c => c.position_id === positionId);
+    if (positionCandidates.length === 0) return '1';
+    const maxOrder = Math.max(...positionCandidates.map(c => c.display_order || 0));
+    return String(maxOrder + 1);
+  };
+
+  const duplicateBallotCandidate = (positionId: string, order: string, excludeId?: string) => {
+    const num = parseInt(order);
+    if (!positionId || isNaN(num)) return null;
+    return candidates.find(c =>
+      c.position_id === positionId &&
+      c.id !== excludeId &&
+      (c.display_order || 0) === num
+    ) || null;
+  };
+
   const openAddCandidate = (defaultPositionId = '') => {
     setEditingCandidate(null);
-    setCandidateForm({ ...EMPTY_CANDIDATE, positionId: defaultPositionId });
+    setCandidateForm({
+      ...EMPTY_CANDIDATE,
+      positionId: defaultPositionId,
+      displayOrder: defaultPositionId ? nextBallotNumber(defaultPositionId) : '1'
+    });
     setImagePreview(null);
     setShowCandidateModal(true);
   };
@@ -136,6 +157,15 @@ export default function AdminCandidatesPage() {
   const saveCandidate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!candidateForm.positionId) return toast.error('Select a position');
+
+    const clash = duplicateBallotCandidate(candidateForm.positionId, candidateForm.displayOrder, editingCandidate?.id);
+    if (clash) {
+      const proceed = confirm(
+        `Ballot number ${candidateForm.displayOrder} is already used by "${clash.full_name}" for this position. Save anyway?`
+      );
+      if (!proceed) return;
+    }
+
     setSubmittingCandidate(true);
 
     try {
@@ -200,7 +230,9 @@ export default function AdminCandidatesPage() {
 
   const byPosition = positions.map(pos => ({
     ...pos,
-    candidates: candidates.filter(c => c.position_id === pos.id)
+    candidates: candidates
+      .filter(c => c.position_id === pos.id)
+      .sort((a, b) => (a.display_order || 0) - (b.display_order || 0))
   }));
 
   return (
@@ -271,6 +303,10 @@ export default function AdminCandidatesPage() {
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                 {position.candidates.map((candidate: any) => (
                   <div key={candidate.id} className="card-glow p-4 relative group">
+                    {/* Ballot number badge */}
+                    <div className="absolute top-2 left-2 z-10 w-6 h-6 rounded-full bg-primary-500 text-dark-900 text-xs font-black flex items-center justify-center">
+                      {candidate.display_order || 0}
+                    </div>
                     {/* Edit/Delete buttons on hover */}
                     <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                       <button
@@ -413,10 +449,34 @@ export default function AdminCandidatesPage() {
             <div>
               <label className="label">Position *</label>
               <select className="input" value={candidateForm.positionId}
-                onChange={e => setCandidateForm(f => ({ ...f, positionId: e.target.value }))} required>
+                onChange={e => setCandidateForm(f => ({
+                  ...f,
+                  positionId: e.target.value,
+                  // Only auto-update the suggested ballot number for new candidates
+                  displayOrder: editingCandidate ? f.displayOrder : nextBallotNumber(e.target.value)
+                }))} required>
                 <option value="">Select position...</option>
                 {positions.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
               </select>
+            </div>
+
+            <div>
+              <label className="label">Ballot Number *</label>
+              <input type="number" min="1" className="input" placeholder="1"
+                value={candidateForm.displayOrder}
+                onChange={e => setCandidateForm(f => ({ ...f, displayOrder: e.target.value }))} required />
+              {(() => {
+                const clash = duplicateBallotCandidate(candidateForm.positionId, candidateForm.displayOrder, editingCandidate?.id);
+                return clash ? (
+                  <p className="text-xs text-red-400 mt-1">
+                    ⚠ Ballot number {candidateForm.displayOrder} is already used by "{clash.full_name}" for this position.
+                  </p>
+                ) : (
+                  <p className="text-xs text-dark-700 mt-1">
+                    This is the position this candidate appears in on the ballot for this office (e.g. 1, 2, 3...). It's auto-suggested but you can change it.
+                  </p>
+                );
+              })()}
             </div>
 
             <div>

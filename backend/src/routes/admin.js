@@ -356,7 +356,7 @@ router.get('/elections/:electionId/students', async (req, res) => {
   const where = conditions.join(' AND ');
 
   const [studentsRes, countRes] = await Promise.all([
-    pool.query(`SELECT id, full_name, surname, index_number, reference_number, level, program, has_voted, voted_at, is_verified, account_locked FROM students s WHERE ${where} ORDER BY s.full_name LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`, [...params, limit, offset]),
+    pool.query(`SELECT id, full_name, surname, index_number, reference_number, level, program, has_voted, voted_at, is_verified, account_locked, phone_number, school_email FROM students s WHERE ${where} ORDER BY s.full_name LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`, [...params, limit, offset]),
     pool.query(`SELECT COUNT(*) FROM students s WHERE ${where}`, params)
   ]);
 
@@ -405,7 +405,7 @@ router.post('/elections/:electionId/candidates', requireRole('super_admin', 'ele
     const { rows } = await pool.query(
       `INSERT INTO candidates (election_id, position_id, full_name, index_number, program, level, bio, image_url, image_public_id, display_order, created_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
-      [electionId, positionId, fullName, indexNumber, program, level, bio, imageUrl, imagePublicId, displayOrder || 0, req.admin.id]
+      [electionId, positionId, fullName, indexNumber, program, level, bio, imageUrl, imagePublicId, parseInt(displayOrder) || 0, req.admin.id]
     );
 
     await auditService.log({
@@ -706,13 +706,15 @@ router.patch('/students/:id/contact', requireRole('super_admin', 'election_admin
     const values = [];
     let idx = 1;
 
-    if (schoolEmail !== undefined) {
+    // Only update a field when a non-empty value was actually provided —
+    // an empty string means "leave this field as-is in the database"
+    if (schoolEmail && schoolEmail.trim() !== '') {
       updates.push(`school_email = $${idx++}`);
-      values.push(schoolEmail || null);
+      values.push(schoolEmail.trim());
     }
-    if (phoneNumber !== undefined) {
+    if (phoneNumber && phoneNumber.trim() !== '') {
       updates.push(`phone_number = $${idx++}`);
-      values.push(phoneNumber || null);
+      values.push(phoneNumber.trim());
     }
     // Reset verification so they go through OTP with new contact
     updates.push(`is_verified = false`);
