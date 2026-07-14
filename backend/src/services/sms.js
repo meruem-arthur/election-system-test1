@@ -44,20 +44,29 @@ function normalizePhone(phone) {
 // ============================================================
 
 async function sendViaAfricasTalking(phone, message) {
+  // phone is already normalized to +233XXXXXXXXX by sendSMS() before this
+  // is called — no need to reformat it here.
   const AfricasTalking = require('africastalking');
   const at = AfricasTalking({
     apiKey: process.env.AT_API_KEY,
     username: process.env.AT_USERNAME
   });
   const sms = at.SMS;
-  await sms.send({
-    to: [phone],
-    message,
-    from: process.env.AT_SENDER_ID || 'ELECTION'
-  });
-  return null; // AT doesn't support the same delivery-status webhook as Twilio
-}
 
+  const params = { to: [phone], message };
+  if (process.env.AT_SENDER_ID) params.from = process.env.AT_SENDER_ID;
+
+  const response = await sms.send(params);
+  const recipient = response?.SMSMessageData?.Recipients?.[0];
+
+  // 100 = Success, confirmed against a real delivered message earlier —
+  // NOT 101. AT's other common codes (401/402/etc.) all indicate failure.
+  if (!recipient || recipient.statusCode !== 100) {
+    throw new Error(`AT send failed for ${phone}: ${recipient?.status || 'unknown error'}`);
+  }
+
+  return recipient.messageId; // matches the string-SID return shape sendViaTwilio already uses
+}
 async function sendViaTwilio(phone, message) {
   const twilio = require('twilio');
   const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
