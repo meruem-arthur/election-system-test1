@@ -6,7 +6,6 @@ const smsService = require('./sms');
 const auditService = require('./audit');
 const logger = require('../utils/logger');
 
-const MAX_ATTEMPTS = 5;
 const BATCH_SIZE = 15;
 const LOGIN_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
@@ -118,6 +117,11 @@ async function processOne(row) {
       emailStatus = 'sent';
       emailError = null;
     } catch (err) {
+      // Fail immediately — no silent auto-retry. The background worker only
+      // ever picks up rows still marked 'pending', so setting 'failed' here
+      // takes this channel out of its queue until an admin explicitly calls
+      // resendFailed() for it (one student, a selected few, or everyone failed).
+      emailStatus = 'failed';
       emailError = err.message;
       logger.warn(`Credential email failed for student ${student.id}: ${err.message}`);
     }
@@ -131,20 +135,14 @@ async function processOne(row) {
       smsStatus = 'sent';
       smsError = null;
     } catch (err) {
+      // Same immediate-fail behavior as email above — admin-triggered retry only.
+      smsStatus = 'failed';
       smsError = err.message;
       logger.warn(`Credential SMS failed for student ${student.id}: ${err.message}`);
     }
   }
 
   const attempts = row.attempts + 1;
-  const stillPending = emailStatus === 'pending' || smsStatus === 'pending';
-  const givingUp = stillPending && attempts >= MAX_ATTEMPTS;
-
-  if (givingUp) {
-    if (emailStatus === 'pending') { emailStatus = 'failed'; emailError = emailError || 'Max attempts reached'; }
-    if (smsStatus === 'pending') { smsStatus = 'failed'; smsError = smsError || 'Max attempts reached'; }
-  }
-
   const resolved = emailStatus !== 'pending' && smsStatus !== 'pending';
 
   await pool.query(
