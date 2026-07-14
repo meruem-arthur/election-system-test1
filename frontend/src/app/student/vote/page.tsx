@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { voteAPI } from '@/lib/api';
 import toast from 'react-hot-toast';
-import { CheckCircle, Clock, ChevronRight, User, LogOut, HelpCircle, Shield, BarChart2 } from 'lucide-react';
+import { CheckCircle, Clock, ChevronRight, User, LogOut, HelpCircle, Shield, BarChart2, RefreshCw } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import Image from 'next/image';
 import WaveBackground from '@/components/WaveBackground';
@@ -224,6 +224,11 @@ export default function VotingPage() {
             <p className="text-xs text-dark-700 mt-2">
               {new Date().toLocaleString()} · Your vote is anonymous and secure.
             </p>
+          </div>
+
+          <div className="flex items-center gap-2 justify-center text-xs mb-6" style={{ color: '#00ff88' }}>
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Live scores update automatically — refresh anytime to see the latest tally.</span>
           </div>
 
           <div className="flex items-center justify-center gap-2 text-xs text-dark-700 mb-8">

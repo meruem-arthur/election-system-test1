@@ -147,6 +147,21 @@ export const adminAPI = {
 
   createAdmin: (data: any) => api.post('/admin/admins', data),
 
+  deactivateAdmin: (adminId: string) =>
+    api.patch(`/admin/admins/${adminId}/deactivate`),
+
+  reactivateAdmin: (adminId: string) =>
+    api.patch(`/admin/admins/${adminId}/reactivate`),
+
+  assignAdminToElection: (adminId: string, electionId: string) =>
+    api.post(`/admin/admins/${adminId}/elections/${electionId}`),
+
+  unassignAdminFromElection: (adminId: string, electionId: string) =>
+    api.delete(`/admin/admins/${adminId}/elections/${electionId}`),
+
+  getElectionAdmins: (electionId: string) =>
+    api.get(`/admin/elections/${electionId}/admins`),
+
   unlockStudent: (studentId: string) =>
     api.patch(`/admin/students/${studentId}/unlock`),
 

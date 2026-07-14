@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { adminAPI, resultsAPI } from '@/lib/api';
 import toast from 'react-hot-toast';
-import { Users, Vote, TrendingUp, Clock, Play, Square, Download, RefreshCw, BarChart2, Eye } from 'lucide-react';
+import { Users, Vote, TrendingUp, Clock, Play, Square, Download, RefreshCw, BarChart2, Eye, UserPlus, X } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import AdminLayout from '@/components/AdminLayout';
 import { useRouter } from 'next/navigation';
@@ -15,12 +15,24 @@ export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  const [currentAdmin, setCurrentAdmin] = useState<any>(null);
+  const [assignedAdmins, setAssignedAdmins] = useState<any[]>([]);
+  const [allAdmins, setAllAdmins] = useState<any[]>([]);
+  const [adminToAssign, setAdminToAssign] = useState('');
+  const [assigning, setAssigning] = useState(false);
+  const [unassigningId, setUnassigningId] = useState<string | null>(null);
+
   useEffect(() => {
     loadElections();
+    const user = localStorage.getItem('user');
+    if (user) setCurrentAdmin(JSON.parse(user));
   }, []);
 
   useEffect(() => {
-    if (selectedElectionId) loadDashboard();
+    if (selectedElectionId) {
+      loadDashboard();
+      loadAssignedAdmins();
+    }
   }, [selectedElectionId]);
 
   const loadElections = async () => {
@@ -45,6 +57,50 @@ export default function AdminDashboardPage() {
     } finally {
       setRefreshing(false);
     }
+  };
+
+  const loadAssignedAdmins = async () => {
+    // Only super_admin can manage assignments — the backend enforces this
+    // too, but skip the calls entirely for non-super_admins to avoid a
+    // pointless 403 in the console.
+    const user = localStorage.getItem('user');
+    const parsedUser = user ? JSON.parse(user) : null;
+    if (parsedUser?.role !== 'super_admin') return;
+
+    try {
+      const [assignedRes, allRes] = await Promise.all([
+        adminAPI.getElectionAdmins(selectedElectionId),
+        adminAPI.getAdmins()
+      ]);
+      setAssignedAdmins(assignedRes.data);
+      setAllAdmins(allRes.data);
+    } catch {
+      toast.error('Failed to load assigned admins');
+    }
+  };
+
+  const assignAdmin = async () => {
+    if (!adminToAssign) return;
+    setAssigning(true);
+    try {
+      await adminAPI.assignAdminToElection(adminToAssign, selectedElectionId);
+      toast.success('Admin assigned to this election');
+      setAdminToAssign('');
+      loadAssignedAdmins();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to assign admin');
+    } finally { setAssigning(false); }
+  };
+
+  const unassignAdmin = async (adminId: string) => {
+    setUnassigningId(adminId);
+    try {
+      await adminAPI.unassignAdminFromElection(adminId, selectedElectionId);
+      toast.success('Admin unassigned from this election');
+      loadAssignedAdmins();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to unassign admin');
+    } finally { setUnassigningId(null); }
   };
 
   const updateStatus = async (status: string) => {
@@ -162,7 +218,54 @@ export default function AdminDashboardPage() {
             </div>
           </div>
 
-          {/* Stats Grid */}
+          {/* Assigned Admins — super_admin only, matches Admin Users page assignments */}
+          {currentAdmin?.role === 'super_admin' && (
+            <div className="card-glow p-6 mb-6">
+              <h3 className="font-bold text-white mb-4 flex items-center gap-2">
+                <Users className="w-4 h-4 text-primary-500" />
+                Admins Assigned to This Election
+              </h3>
+
+              {assignedAdmins.length === 0 ? (
+                <p className="text-sm text-dark-700 mb-4">No admins assigned to this election yet.</p>
+              ) : (
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {assignedAdmins.map(admin => (
+                    <div key={admin.id} className="flex items-center gap-2 bg-dark-400 rounded-lg px-3 py-1.5">
+                      <span className="text-sm text-white">{admin.full_name}</span>
+                      <span className="text-xs text-dark-700">({admin.role.replace('_', ' ')})</span>
+                      <button
+                        onClick={() => unassignAdmin(admin.id)}
+                        disabled={unassigningId === admin.id}
+                        title="Remove from this election"
+                        className="text-dark-700 hover:text-red-400 transition-colors"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <select
+                  className="input text-sm py-2 flex-1"
+                  value={adminToAssign}
+                  onChange={e => setAdminToAssign(e.target.value)}
+                >
+                  <option value="">Select an admin to assign...</option>
+                  {allAdmins
+                    .filter(a => a.role !== 'super_admin' && !assignedAdmins.some(aa => aa.id === a.id))
+                    .map(a => (
+                      <option key={a.id} value={a.id}>{a.full_name} ({a.email})</option>
+                    ))}
+                </select>
+                <button onClick={assignAdmin} disabled={!adminToAssign || assigning} className="btn-primary py-2 px-4 text-sm">
+                  {assigning ? <div className="spinner" /> : <><UserPlus className="w-4 h-4" /> Assign</>}
+                </button>
+              </div>
+            </div>
+          )}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             <StatCard
               icon={<Users className="w-5 h-5" />}

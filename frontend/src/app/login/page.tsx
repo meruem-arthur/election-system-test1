@@ -97,7 +97,7 @@ export default function StudentLoginPage() {
                 <input
                   type={showPassword ? 'text' : 'password'}
                   className="input pr-12"
-                  placeholder="First time? Use Surname + last 4 digits"
+                  placeholder="First time? Check your email/SMS for your password"
                   value={form.password}
                   onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
                   autoComplete="current-password"
@@ -115,9 +115,9 @@ export default function StudentLoginPage() {
             {/* First login hint */}
             <div className="rounded-xl p-3" style={{ background: 'rgba(0,255,136,0.05)', border: '1px solid rgba(0,255,136,0.1)' }}>
               <p className="text-xs text-dark-800">
-                <span style={{ color: '#00ff88' }}>First time?</span> Use your <strong className="text-white">Surname + last 4 digits</strong> of your reference number.
+                <span style={{ color: '#00ff88' }}>First time?</span> Your temporary password was sent to your <strong className="text-white">email and phone number</strong> on file.
                 <br/>
-                <span className="text-dark-700">Example: Mensah0723</span>
+                <span className="text-dark-700">Can't find it? Contact your election administrator to resend it.</span>
               </p>
             </div>
 

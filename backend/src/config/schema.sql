@@ -18,7 +18,8 @@ CREATE TYPE audit_action AS ENUM (
   'election_stopped', 'csv_uploaded', 'candidate_added', 'candidate_approved',
   'results_published', 'password_changed', 'otp_verified', 'admin_created',
   'suspicious_login', 'vote_attempt_duplicate', 'credentials_dispatched',
-  'credentials_regenerated', 'admin_election_assigned', 'admin_election_unassigned'
+  'credentials_regenerated', 'admin_election_assigned', 'admin_election_unassigned',
+  'admin_deactivated', 'admin_reactivated'
 );
 
 -- ============================================================

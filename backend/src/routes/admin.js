@@ -631,7 +631,7 @@ router.delete('/positions/:id', requireRole('super_admin', 'election_admin'), re
 // ============================================================
 
 router.post('/admins', requireRole('super_admin'), async (req, res) => {
-  const { email, fullName, role, password } = req.body;
+  const { email, fullName, role, password, electionIds } = req.body;
   if (!email || !fullName || !role || !password) return res.status(400).json({ error: 'All fields required' });
 
   const hash = await bcrypt.hash(password, 12);
@@ -640,11 +640,81 @@ router.post('/admins', requireRole('super_admin'), async (req, res) => {
       'INSERT INTO admins (email, full_name, role, password_hash, created_by) VALUES ($1, $2, $3, $4, $5) RETURNING id, email, full_name, role',
       [email, fullName, role, hash, req.admin.id]
     );
+    const newAdmin = rows[0];
+
+    // super_admin already has full access everywhere — assignment is meaningless
+    // for that role, so only apply election assignments for non-super_admins.
+    if (role !== 'super_admin' && Array.isArray(electionIds) && electionIds.length > 0) {
+      for (const electionId of electionIds) {
+        await pool.query(
+          `INSERT INTO admin_election_assignments (admin_id, election_id, assigned_by)
+           VALUES ($1, $2, $3) ON CONFLICT (admin_id, election_id) DO NOTHING`,
+          [newAdmin.id, electionId, req.admin.id]
+        );
+      }
+    }
+
     await auditService.log({ action: 'admin_created', actorType: 'admin', actorId: req.admin.id, metadata: { newAdminEmail: email }, ip: req.ip });
-    res.status(201).json(rows[0]);
+    res.status(201).json(newAdmin);
   } catch (err) {
     if (err.code === '23505') return res.status(409).json({ error: 'Admin with this email already exists' });
     res.status(500).json({ error: 'Failed to create admin' });
+  }
+});
+
+router.patch('/admins/:id/deactivate', requireRole('super_admin'), async (req, res) => {
+  try {
+    if (req.params.id === req.admin.id) {
+      return res.status(400).json({ error: 'You cannot deactivate your own account' });
+    }
+
+    const { rows } = await pool.query('SELECT id, role, is_active FROM admins WHERE id = $1', [req.params.id]);
+    const target = rows[0];
+    if (!target) return res.status(404).json({ error: 'Admin not found' });
+
+    if (target.role === 'super_admin') {
+      const { rows: activeSuperAdmins } = await pool.query(
+        "SELECT COUNT(*) FROM admins WHERE role = 'super_admin' AND is_active = true"
+      );
+      if (parseInt(activeSuperAdmins[0].count) <= 1) {
+        return res.status(400).json({ error: 'Cannot deactivate the only remaining active super admin' });
+      }
+    }
+
+    await pool.query('UPDATE admins SET is_active = false WHERE id = $1', [req.params.id]);
+    await auditService.log({
+      action: 'admin_deactivated',
+      actorType: 'admin',
+      actorId: req.admin.id,
+      actorEmail: req.admin.email,
+      metadata: { deactivatedAdminId: req.params.id },
+      ip: req.ip
+    });
+    res.json({ message: 'Admin deactivated' });
+  } catch (err) {
+    logger.error('Deactivate admin error:', err);
+    res.status(500).json({ error: 'Failed to deactivate admin' });
+  }
+});
+
+router.patch('/admins/:id/reactivate', requireRole('super_admin'), async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT id FROM admins WHERE id = $1', [req.params.id]);
+    if (!rows[0]) return res.status(404).json({ error: 'Admin not found' });
+
+    await pool.query('UPDATE admins SET is_active = true WHERE id = $1', [req.params.id]);
+    await auditService.log({
+      action: 'admin_reactivated',
+      actorType: 'admin',
+      actorId: req.admin.id,
+      actorEmail: req.admin.email,
+      metadata: { reactivatedAdminId: req.params.id },
+      ip: req.ip
+    });
+    res.json({ message: 'Admin reactivated' });
+  } catch (err) {
+    logger.error('Reactivate admin error:', err);
+    res.status(500).json({ error: 'Failed to reactivate admin' });
   }
 });
 
