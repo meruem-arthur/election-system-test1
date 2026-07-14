@@ -113,7 +113,7 @@ async function processOne(row) {
 
   if (emailStatus === 'pending') {
     try {
-      await emailService.sendCredentialsEmail(student.school_email, student.full_name, student.reference_number, plaintext, `${LOGIN_URL}/login`);
+      await emailService.sendCredentialsEmail(student.school_email, student.full_name, student.reference_number, plaintext, `${LOGIN_URL}/login`, student.department);
       emailStatus = 'sent';
       emailError = null;
     } catch (err) {

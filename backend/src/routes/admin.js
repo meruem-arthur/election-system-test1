@@ -300,7 +300,7 @@ router.post('/elections/:electionId/students/upload', requireRole('super_admin',
           // fail the import; the admin can resend via the regenerate route.
           try {
             if (student.email) {
-              await sendCredentialsEmail(student.email, student.fullName, student.referenceNumber, tempPassword, `${LOGIN_URL}/login`);
+              await sendCredentialsEmail(student.email, student.fullName, student.referenceNumber, tempPassword, `${LOGIN_URL}/login`, student.department);
             } else if (student.phone) {
               await sendCredentialsSMS(student.phone, student.fullName, student.referenceNumber, tempPassword, `${LOGIN_URL}/login`);
             } else {
@@ -865,7 +865,7 @@ router.patch('/students/:id/regenerate-credentials', requireRole('super_admin', 
 
     let sentVia = null;
     if (student.school_email) {
-      await sendCredentialsEmail(student.school_email, student.full_name, student.reference_number, tempPassword, `${LOGIN_URL}/login`);
+      await sendCredentialsEmail(student.school_email, student.full_name, student.reference_number, tempPassword, `${LOGIN_URL}/login`, student.department);
       sentVia = 'email';
     } else if (student.phone_number) {
       await sendCredentialsSMS(student.phone_number, student.full_name, student.reference_number, tempPassword, `${LOGIN_URL}/login`);

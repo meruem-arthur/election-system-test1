@@ -218,7 +218,8 @@ router.post('/cast', authenticateStudent, requireVerified, async (req, res) => {
           studentRows[0].school_email,
           studentRows[0].full_name,
           new Date(),
-          receiptCode
+          receiptCode,
+          studentRows[0].department
         );
       }
     } catch (emailErr) {

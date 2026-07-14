@@ -34,7 +34,20 @@ async function sendViaBrevo(to, subject, html, name) {
 // OTP EMAIL
 // ============================================================
 
-async function sendOTPEmail(to, name, code) {
+// Builds the branded name/tagline shown in every email, e.g. "GESA" +
+// "GESA — Departmental Smart Election System", or a generic fallback for
+// departments that haven't been given a short name yet. `department` is
+// the student's/election's department string already on hand at every
+// call site (student.department), so no extra query is needed.
+function brand(department) {
+  const dept = (department || '').trim();
+  const shortName = dept || 'Smart Election System';
+  const tagline = dept ? `${dept} — Departmental Smart Election System` : 'Departmental Smart Election System';
+  return { shortName, tagline };
+}
+
+async function sendOTPEmail(to, name, code, department) {
+  const { shortName, tagline } = brand(department);
   const html = `
     <!DOCTYPE html>
     <html>
@@ -47,14 +60,14 @@ async function sendOTPEmail(to, name, code) {
     </style></head>
     <body>
       <div class="container">
-        <div class="logo">⚡ GESA SMART ELECTION SYSTEM</div>
+        <div class="logo">⚡ ${shortName.toUpperCase()} SMART ELECTION SYSTEM</div>
         <p>Hello <strong>${name}</strong>,</p>
         <p>Your one-time verification code is:</p>
         <div class="code">${code}</div>
         <p>This code expires in <strong>10 minutes</strong>. Do not share it with anyone.</p>
         <div class="footer">
           <p>If you did not request this, please contact your election administrator immediately.</p>
-          <p>GESA UMaT — Departmental Smart Election System</p>
+          <p>${tagline}</p>
         </div>
       </div>
     </body>
@@ -69,7 +82,8 @@ async function sendOTPEmail(to, name, code) {
 // VOTE CONFIRMATION EMAIL — fire and forget, never blocks vote
 // ============================================================
 
-function sendVoteConfirmationEmail(to, name, timestamp, receiptCode) {
+function sendVoteConfirmationEmail(to, name, timestamp, receiptCode, department) {
+  const { shortName } = brand(department);
   const html = `
     <!DOCTYPE html>
     <html>
@@ -88,7 +102,7 @@ function sendVoteConfirmationEmail(to, name, timestamp, receiptCode) {
           <p>Receipt: ${receiptCode}</p>
           <p>Time: ${new Date(timestamp).toLocaleString()}</p>
         </div>
-        <p>Your vote is anonymous and secure. Thank you for participating in the GESA election.</p>
+        <p>Your vote is anonymous and secure. Thank you for participating in the ${shortName} election.</p>
       </div>
     </body>
     </html>
@@ -111,7 +125,8 @@ function sendVoteConfirmationEmail(to, name, timestamp, receiptCode) {
 // number. Restored here alongside the new login-link button.
 // ============================================================
 
-async function sendCredentialsEmail(to, name, referenceNumber, tempPassword, loginUrl) {
+async function sendCredentialsEmail(to, name, referenceNumber, tempPassword, loginUrl, department) {
+  const { shortName, tagline } = brand(department);
   const html = `
     <!DOCTYPE html>
     <html>
@@ -127,7 +142,7 @@ async function sendCredentialsEmail(to, name, referenceNumber, tempPassword, log
     </style></head>
     <body>
       <div class="container">
-        <div class="logo">⚡ GESA SMART ELECTION SYSTEM</div>
+        <div class="logo">⚡ ${shortName.toUpperCase()} SMART ELECTION SYSTEM</div>
         <p>Hello <strong>${name}</strong>,</p>
         <p>Your login credentials for the election portal are below. You will be asked to set a new password on your first login.</p>
         <div class="creds">
@@ -138,7 +153,7 @@ async function sendCredentialsEmail(to, name, referenceNumber, tempPassword, log
         <p>This temporary password is unique to you and was randomly generated. Do not share it with anyone.</p>
         <div class="footer">
           <p>If you did not expect this email, please contact your election administrator immediately.</p>
-          <p>GESA UMaT — Departmental Smart Election System</p>
+          <p>${tagline}</p>
         </div>
       </div>
     </body>

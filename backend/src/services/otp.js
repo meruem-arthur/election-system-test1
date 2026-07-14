@@ -125,7 +125,7 @@ async function sendOTP(student) {
   if (emailDestination) {
     try {
       const emailService = require('./email');
-      await emailService.sendOTPEmail(emailDestination, student.full_name, code);
+      await emailService.sendOTPEmail(emailDestination, student.full_name, code, student.department);
       logger.info('OTP email sent to ' + emailMasked);
     } catch (err) {
       logger.warn('OTP email failed — use the code printed in console above');
