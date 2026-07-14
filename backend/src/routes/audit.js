@@ -10,8 +10,36 @@ router.get('/', async (req, res) => {
   const offset = (page - 1) * limit;
   let conditions = [];
   let params = [];
+  const isSuperAdmin = req.admin.role === 'super_admin';
 
-  if (electionId) { conditions.push(`election_id = $${params.length + 1}`); params.push(electionId); }
+  if (!isSuperAdmin) {
+    // Non-super_admins only ever see logs for elections they're actually
+    // assigned to — never the full system-wide trail, and never other
+    // departments' logs.
+    const { rows: assigned } = await pool.query(
+      'SELECT election_id FROM admin_election_assignments WHERE admin_id = $1',
+      [req.admin.id]
+    );
+    const assignedIds = assigned.map(r => r.election_id);
+
+    if (electionId) {
+      if (!assignedIds.includes(electionId)) {
+        return res.status(403).json({ error: 'You are not assigned to this election' });
+      }
+      conditions.push(`election_id = $${params.length + 1}`);
+      params.push(electionId);
+    } else {
+      if (assignedIds.length === 0) {
+        return res.json([]);
+      }
+      conditions.push(`election_id = ANY($${params.length + 1}::uuid[])`);
+      params.push(assignedIds);
+    }
+  } else if (electionId) {
+    conditions.push(`election_id = $${params.length + 1}`);
+    params.push(electionId);
+  }
+
   if (action) { conditions.push(`action = $${params.length + 1}`); params.push(action); }
 
   const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
