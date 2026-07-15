@@ -220,6 +220,7 @@ export const resultsAPI = {
 
 export const auditAPI = {
   getLogs: (params?: any) => api.get('/audit', { params }),
+  exportCSV: (params?: any) => api.get('/audit/export', { params, responseType: 'blob' }),
 };
 
 // ============================================================

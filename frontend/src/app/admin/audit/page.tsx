@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { auditAPI, adminAPI } from '@/lib/api';
 import toast from 'react-hot-toast';
-import { RefreshCw, Shield, Filter } from 'lucide-react';
+import { RefreshCw, Shield, Filter, Download } from 'lucide-react';
 import AdminLayout from '@/components/AdminLayout';
 import { format } from 'date-fns';
 
@@ -22,12 +22,25 @@ const ACTION_COLORS: Record<string, string> = {
   vote_attempt_duplicate: 'text-red-400',
 };
 
+// Default view is the last 7 days, not "everything since the beginning" —
+// the full history is always one click away by widening the range, but
+// nobody should have to scroll past months of entries just to see today.
+const toDateInput = (d: Date) => d.toISOString().slice(0, 10);
+const defaultFrom = () => {
+  const d = new Date();
+  d.setDate(d.getDate() - 7);
+  return toDateInput(d);
+};
+
 export default function AdminAuditPage() {
   const [logs, setLogs] = useState<any[]>([]);
   const [elections, setElections] = useState<any[]>([]);
   const [selectedElectionId, setSelectedElectionId] = useState('');
   const [filterAction, setFilterAction] = useState('');
+  const [dateFrom, setDateFrom] = useState(defaultFrom());
+  const [dateTo, setDateTo] = useState(toDateInput(new Date()));
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     adminAPI.getElections().then(({ data }) => {
@@ -38,19 +51,44 @@ export default function AdminAuditPage() {
 
   useEffect(() => {
     loadLogs();
-  }, [selectedElectionId, filterAction]);
+  }, [selectedElectionId, filterAction, dateFrom, dateTo]);
+
+  const buildParams = () => ({
+    electionId: selectedElectionId || undefined,
+    action: filterAction || undefined,
+    from: dateFrom || undefined,
+    to: dateTo || undefined,
+  });
 
   const loadLogs = async () => {
     setLoading(true);
     try {
-      const { data } = await auditAPI.getLogs({
-        electionId: selectedElectionId || undefined,
-        action: filterAction || undefined,
-        limit: 200
-      });
+      const { data } = await auditAPI.getLogs({ ...buildParams(), limit: 200 });
       setLogs(data);
     } catch { toast.error('Failed to load audit logs'); }
     finally { setLoading(false); }
+  };
+
+  const clearDateRange = () => {
+    setDateFrom('');
+    setDateTo('');
+  };
+
+  const exportCSV = async () => {
+    setExporting(true);
+    try {
+      const { data } = await auditAPI.exportCSV(buildParams());
+      const blob = new Blob([data], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `audit-log-${toDateInput(new Date())}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch { toast.error('Failed to export audit log'); }
+    finally { setExporting(false); }
   };
 
   return (
@@ -62,13 +100,18 @@ export default function AdminAuditPage() {
           </h1>
           <p className="text-dark-800 text-sm mt-1">Complete activity trail for transparency</p>
         </div>
-        <button onClick={loadLogs} className="btn-secondary py-2 px-4 text-sm">
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
-        </button>
+        <div className="flex gap-2">
+          <button onClick={exportCSV} disabled={exporting} className="btn-secondary py-2 px-4 text-sm">
+            <Download className={`w-4 h-4 ${exporting ? 'animate-pulse' : ''}`} /> {exporting ? 'Exporting...' : 'Export CSV'}
+          </button>
+          <button onClick={loadLogs} className="btn-secondary py-2 px-4 text-sm">
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3 mb-6">
+      <div className="flex flex-wrap items-center gap-3 mb-6">
         <select value={selectedElectionId} onChange={e => setSelectedElectionId(e.target.value)} className="input py-2 text-sm" style={{ width: 'auto' }}>
           <option value="">All Elections</option>
           {elections.map(e => <option key={e.id} value={e.id}>{e.title}</option>)}
@@ -83,6 +126,17 @@ export default function AdminAuditPage() {
           <option value="suspicious_login">Suspicious Logins</option>
           <option value="vote_attempt_duplicate">Duplicate Vote Attempts</option>
         </select>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-dark-700">From</span>
+          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="input py-2 text-sm" style={{ width: 'auto' }} />
+          <span className="text-xs text-dark-700">To</span>
+          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="input py-2 text-sm" style={{ width: 'auto' }} />
+        </div>
+        {(dateFrom || dateTo) && (
+          <button onClick={clearDateRange} className="text-xs text-primary-500 underline">
+            View full history
+          </button>
+        )}
       </div>
 
       <div className="card-glow overflow-hidden">
