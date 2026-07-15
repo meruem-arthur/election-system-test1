@@ -19,6 +19,12 @@ export default function AdminElectionsPage() {
     academicYear: '', startTime: '', endTime: ''
   });
   const [submitting, setSubmitting] = useState(false);
+  const [admin, setAdmin] = useState<any>(null);
+
+  useEffect(() => {
+    const user = localStorage.getItem('user');
+    if (user) setAdmin(JSON.parse(user));
+  }, []);
 
   useEffect(() => { loadElections(); }, []);
 
@@ -92,7 +98,7 @@ export default function AdminElectionsPage() {
           <p className="text-dark-800 text-sm mt-1">Create and manage departmental elections</p>
         </div>
         <div className="flex items-center gap-3">
-          {elections.length > 0 && (
+          {elections.length > 0 && admin?.role === 'super_admin' && (
             <button
               onClick={() => setConfirmDeleteAll(true)}
               className="flex items-center gap-2 py-2 px-4 rounded-xl font-semibold text-sm transition-all"
@@ -101,9 +107,11 @@ export default function AdminElectionsPage() {
               <Trash2 className="w-4 h-4" /> Delete All
             </button>
           )}
-          <button onClick={() => setShowCreate(true)} className="btn-primary">
-            <Plus className="w-4 h-4" /> New Election
-          </button>
+          {admin?.role === 'super_admin' && (
+            <button onClick={() => setShowCreate(true)} className="btn-primary">
+              <Plus className="w-4 h-4" /> New Election
+            </button>
+          )}
         </div>
       </div>
 
@@ -112,8 +120,12 @@ export default function AdminElectionsPage() {
       ) : elections.length === 0 ? (
         <div className="card-glow p-16 text-center">
           <Calendar className="w-12 h-12 text-dark-600 mx-auto mb-4" />
-          <p className="text-dark-700 mb-4">No elections created yet</p>
-          <button onClick={() => setShowCreate(true)} className="btn-primary">Create First Election</button>
+          <p className="text-dark-700 mb-4">
+            {admin?.role === 'super_admin' ? 'No elections created yet' : 'No elections assigned to you yet — ask a super admin to assign you to one.'}
+          </p>
+          {admin?.role === 'super_admin' && (
+            <button onClick={() => setShowCreate(true)} className="btn-primary">Create First Election</button>
+          )}
         </div>
       ) : (
         <div className="space-y-4">
@@ -159,15 +171,16 @@ export default function AdminElectionsPage() {
                   >
                     Dashboard <ChevronRight className="w-3 h-3" />
                   </button>
-                  {/* Delete button — available for all election statuses */}
-                  <button
-                    onClick={() => setConfirmDelete(e)}
-                    className="py-2 px-3 text-xs rounded-xl transition-all"
-                    style={{ background: 'transparent', border: '1px solid rgba(255,68,68,0.3)', color: '#ff4444' }}
-                    title="Delete election"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
+                  {admin?.role === 'super_admin' && (
+                    <button
+                      onClick={() => setConfirmDelete(e)}
+                      className="py-2 px-3 text-xs rounded-xl transition-all"
+                      style={{ background: 'transparent', border: '1px solid rgba(255,68,68,0.3)', color: '#ff4444' }}
+                      title="Delete election"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

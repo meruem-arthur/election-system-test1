@@ -17,7 +17,7 @@ const navItems = [
   { href: '/admin/results', icon: BarChart2, label: 'Results' },
   { href: '/admin/audit', icon: ClipboardList, label: 'Audit Logs' },
   { href: '/admin/support', icon: HelpCircle, label: 'Support' },
-  { href: '/admin/admins', icon: Shield, label: 'Admin Users' },
+  { href: '/admin/admins', icon: Shield, label: 'Admin Users', roles: ['super_admin'] },
   { href: '/admin/settings', icon: Settings, label: 'Settings' },
 ];
 
@@ -64,7 +64,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
       {/* Nav */}
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-        {navItems.map(item => {
+        {navItems
+          .filter(item => !item.roles || item.roles.includes(admin?.role))
+          .map(item => {
           const active = pathname === item.href;
           return (
             <Link
