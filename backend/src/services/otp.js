@@ -111,14 +111,19 @@ async function sendOTP(student) {
     );
   }
 
-  // ALWAYS print clearly to console for local testing
-  console.log('\n' + '='.repeat(52));
-  console.log('  OTP CODE FOR TESTING');
-  console.log('='.repeat(52));
-  console.log('  Student : ' + student.full_name);
-  console.log('  Ref No  : ' + student.reference_number);
-  console.log('  OTP Code: \x1b[32m\x1b[1m' + code + '\x1b[0m  <-- USE THIS');
-  console.log('='.repeat(52) + '\n');
+  // Print to console for local testing ONLY — never in production, where
+  // console output routinely ends up in a hosting provider's log viewer,
+  // a log-aggregation service, or (as happened in this repo) a committed
+  // log file. Logging live OTPs there is a full 2FA bypass.
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('\n' + '='.repeat(52));
+    console.log('  OTP CODE FOR TESTING (dev only — never logged in production)');
+    console.log('='.repeat(52));
+    console.log('  Student : ' + student.full_name);
+    console.log('  Ref No  : ' + student.reference_number);
+    console.log('  OTP Code: \x1b[32m\x1b[1m' + code + '\x1b[0m  <-- USE THIS');
+    console.log('='.repeat(52) + '\n');
+  }
 
   // Try sending via email AND SMS independently — one failing should never
   // block or skip the other, since each is a separate delivery channel
@@ -128,7 +133,7 @@ async function sendOTP(student) {
       await emailService.sendOTPEmail(emailDestination, student.full_name, code, student.department);
       logger.info('OTP email sent to ' + emailMasked);
     } catch (err) {
-      logger.warn('OTP email failed — use the code printed in console above');
+      logger.warn('OTP email failed' + (process.env.NODE_ENV !== 'production' ? ' — use the code printed in console above' : ' — student will need to use resend-otp or contact support'));
       logger.error('OTP email error detail: ' + (err && err.message ? err.message : err));
       if (err && err.code) logger.error('OTP email error code: ' + err.code);
       if (err && err.response) logger.error('OTP email SMTP response: ' + err.response);
@@ -141,7 +146,7 @@ async function sendOTP(student) {
       await smsService.sendOTPSMS(smsDestination, code);
       logger.info('OTP SMS sent to ' + smsMasked);
     } catch (err) {
-      logger.warn('OTP SMS failed — use the code printed in console above');
+      logger.warn('OTP SMS failed' + (process.env.NODE_ENV !== 'production' ? ' — use the code printed in console above' : ' — student will need to use resend-otp or contact support'));
       logger.error('OTP SMS error detail: ' + (err && err.message ? err.message : err));
       if (err && err.code) logger.error('OTP SMS error code: ' + err.code);
       if (err && err.moreInfo) logger.error('OTP SMS Twilio info: ' + err.moreInfo);
