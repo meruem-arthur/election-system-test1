@@ -1,9 +1,46 @@
 const express = require('express');
 const router = express.Router();
 const PDFDocument = require('pdfkit');
+const jwt = require('jsonwebtoken');
 const { pool } = require('../config/database');
 const { authenticateAdmin, authenticateStudent } = require('../middleware/auth');
 const logger = require('../utils/logger');
+
+// ============================================================
+// Checks whether the bearer token (if any) belongs to an admin who is
+// allowed to see this election's results pre-publish — i.e. either a
+// super_admin, or an election_admin/observer explicitly assigned to it.
+// Mirrors the scoping in middleware/auth.js#requireElectionAccess so
+// results can't be viewed cross-election by an unrelated admin.
+// Returns false for anonymous/student tokens or invalid/expired ones.
+// ============================================================
+async function isAuthorizedAdminForElection(req, electionId) {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  if (!token) return false;
+
+  let decoded;
+  try {
+    decoded = jwt.verify(token, process.env.JWT_SECRET);
+  } catch {
+    return false;
+  }
+  if (decoded.type !== 'admin') return false;
+
+  const { rows } = await pool.query(
+    'SELECT id, role, is_active FROM admins WHERE id = $1',
+    [decoded.id]
+  );
+  const admin = rows[0];
+  if (!admin || !admin.is_active) return false;
+
+  if (admin.role === 'super_admin') return true;
+
+  const { rows: assignment } = await pool.query(
+    'SELECT 1 FROM admin_election_assignments WHERE admin_id = $1 AND election_id = $2',
+    [admin.id, electionId]
+  );
+  return assignment.length > 0;
+}
 
 // ============================================================
 // GET RESULTS (Admin always, Students only after publish)
@@ -22,23 +59,17 @@ router.get('/published', async (req, res) => {
 });
 router.get('/:electionId', async (req, res) => {
   const { electionId } = req.params;
-  const token = req.headers.authorization?.replace('Bearer ', '');
 
   try {
     const { rows: [election] } = await pool.query('SELECT * FROM elections WHERE id = $1', [electionId]);
     if (!election) return res.status(404).json({ error: 'Election not found' });
 
-    // Students can only see results after official release
-    const jwt = require('jsonwebtoken');
-    let isAdmin = false;
-    try {
-      if (token) {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        isAdmin = decoded.type === 'admin';
-      }
-    } catch {}
+    // Students/anonymous can only see results after official release.
+    // Admins can see pre-publish results only for elections they're
+    // assigned to (super_admin sees all) — prevents cross-election snooping.
+    const isAuthorizedAdmin = await isAuthorizedAdminForElection(req, electionId);
 
-    if (!isAdmin && election.status !== 'results_published') {
+    if (!isAuthorizedAdmin && election.status !== 'results_published') {
       return res.status(403).json({ error: 'Results have not been officially released yet' });
     }
 
@@ -169,24 +200,16 @@ router.get('/:electionId', async (req, res) => {
 
 router.get('/:electionId/pdf', async (req, res) => {
   const { electionId } = req.params;
-  const token = req.headers.authorization?.replace('Bearer ', '');
 
   try {
     const { rows: [election] } = await pool.query('SELECT * FROM elections WHERE id = $1', [electionId]);
     if (!election) return res.status(404).json({ error: 'Election not found' });
 
-    // Same rule as the JSON results route: admins can always view,
-    // students/anonymous users only after official release.
-    const jwt = require('jsonwebtoken');
-    let isAdmin = false;
-    try {
-      if (token) {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        isAdmin = decoded.type === 'admin';
-      }
-    } catch {}
+    // Same rule as the JSON results route: admins can view pre-publish only
+    // for elections they're assigned to; everyone else needs official release.
+    const isAuthorizedAdmin = await isAuthorizedAdminForElection(req, electionId);
 
-    if (!isAdmin && election.status !== 'results_published') {
+    if (!isAuthorizedAdmin && election.status !== 'results_published') {
       return res.status(403).json({ error: 'Results have not been officially released yet' });
     }
 
