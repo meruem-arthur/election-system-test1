@@ -214,18 +214,17 @@ router.get('/:electionId/pdf', async (req, res) => {
     }
 
     const { rows: results } = await pool.query(`
-      SELECT p.title as position, c.full_name as candidate,
-        COUNT(b.id) as total_votes,
-        COUNT(b.id) FILTER (WHERE b.ballot_token NOT LIKE 'NO_%') as yes_votes,
-        COUNT(b.id) FILTER (WHERE b.ballot_token LIKE 'NO_%') as no_votes,
-        COUNT(DISTINCT c2.id) as position_candidate_count
-      FROM positions p
-      JOIN candidates c ON c.position_id = p.id AND c.is_approved = true
-      LEFT JOIN candidates c2 ON c2.position_id = p.id AND c2.election_id = p.election_id AND c2.is_approved = true
-      LEFT JOIN ballots b ON b.candidate_id = c.id
-      WHERE p.election_id = $1
-      GROUP BY p.title, c.full_name, p.display_order
-      ORDER BY p.display_order, yes_votes DESC
+SELECT p.title as position, c.full_name as candidate,
+  COUNT(b.id) as total_votes,
+  COUNT(b.id) FILTER (WHERE b.ballot_token NOT LIKE 'NO_%') as yes_votes,
+  COUNT(b.id) FILTER (WHERE b.ballot_token LIKE 'NO_%') as no_votes,
+  (SELECT COUNT(*) FROM candidates c3 WHERE c3.position_id = p.id AND c3.election_id = p.election_id AND c3.is_approved = true) as position_candidate_count
+FROM positions p
+JOIN candidates c ON c.position_id = p.id AND c.election_id = p.election_id AND c.is_approved = true
+LEFT JOIN ballots b ON b.candidate_id = c.id AND b.election_id = p.election_id
+WHERE p.election_id = $1
+GROUP BY p.title, c.full_name, p.display_order
+ORDER BY p.display_order, yes_votes DESC
     `, [electionId]);
 
     const doc = new PDFDocument({ margin: 50 });
