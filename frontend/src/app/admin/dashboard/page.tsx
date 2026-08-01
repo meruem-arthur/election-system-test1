@@ -144,7 +144,7 @@ export default function AdminDashboardPage() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl font-black uppercase tracking-widest" style={{ fontFamily: 'var(--font-orbitron)', color: '#00ff88' }}>
+          <h1 className="text-2xl font-black uppercase tracking-widest" style={{ fontFamily: 'var(--font-orbitron)', color: '#b44fff' }}>
             Dashboard
           </h1>
           <p className="text-dark-800 text-sm mt-1">Live election monitoring & control</p>
@@ -295,7 +295,7 @@ export default function AdminDashboardPage() {
           <div className="card-glow p-6 mb-6">
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-bold text-white">Voter Turnout</h3>
-              <span style={{ color: '#00ff88' }} className="font-mono text-lg font-bold">
+              <span style={{ color: '#b44fff' }} className="font-mono text-lg font-bold">
                 {dashboard.stats.turnoutPercentage}%
               </span>
             </div>
@@ -325,11 +325,11 @@ export default function AdminDashboardPage() {
                     <XAxis dataKey="name" tick={{ fill: '#666', fontSize: 11 }} />
                     <YAxis tick={{ fill: '#666', fontSize: 11 }} />
                     <Tooltip
-                      contentStyle={{ background: '#111', border: '1px solid #00ff88', borderRadius: 8 }}
-                      itemStyle={{ color: '#00ff88' }}
+                      contentStyle={{ background: '#111', border: '1px solid #b44fff', borderRadius: 8 }}
+                      itemStyle={{ color: '#b44fff' }}
                     />
-                    <Bar dataKey="voted" fill="#00ff88" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="total" fill="#1a1a1a" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="voted" fill="#b44fff" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="total" fill="#1e1e4a" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -347,7 +347,7 @@ export default function AdminDashboardPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between text-xs mb-1">
                         <span className="text-white truncate">{cv.candidate}</span>
-                        <span style={{ color: '#00ff88' }} className="font-mono ml-2">{cv.votes}</span>
+                        <span style={{ color: '#b44fff' }} className="font-mono ml-2">{cv.votes}</span>
                       </div>
                       <p className="text-xs text-dark-700">{cv.position}</p>
                     </div>
