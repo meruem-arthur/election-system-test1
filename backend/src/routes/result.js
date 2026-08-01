@@ -214,46 +214,139 @@ router.get('/:electionId/pdf', async (req, res) => {
     }
 
     const { rows: results } = await pool.query(`
-SELECT p.title as position, c.full_name as candidate,
-  COUNT(b.id) as total_votes,
-  COUNT(b.id) FILTER (WHERE b.ballot_token NOT LIKE 'NO_%') as yes_votes,
-  COUNT(b.id) FILTER (WHERE b.ballot_token LIKE 'NO_%') as no_votes,
-  (SELECT COUNT(*) FROM candidates c3 WHERE c3.position_id = p.id AND c3.election_id = p.election_id AND c3.is_approved = true) as position_candidate_count
-FROM positions p
-JOIN candidates c ON c.position_id = p.id AND c.election_id = p.election_id AND c.is_approved = true
-LEFT JOIN ballots b ON b.candidate_id = c.id AND b.election_id = p.election_id
-WHERE p.election_id = $1
-GROUP BY p.id, p.title, p.display_order, c.id, c.full_name
-ORDER BY p.display_order, yes_votes DESC
+      SELECT 
+        p.id as position_id,
+        p.title as position,
+        p.display_order,
+        c.id as candidate_id,
+        c.full_name as candidate,
+        COUNT(b.id)::integer as total_votes,
+        COUNT(b.id) FILTER (WHERE b.ballot_token NOT LIKE 'NO_%')::integer as yes_votes,
+        COUNT(b.id) FILTER (WHERE b.ballot_token LIKE 'NO_%')::integer as no_votes,
+        COUNT(DISTINCT c2.id) as position_candidate_count
+      FROM positions p
+      JOIN candidates c ON c.position_id = p.id AND c.election_id = p.election_id AND c.is_approved = true
+      LEFT JOIN candidates c2 ON c2.position_id = p.id AND c2.election_id = p.election_id AND c2.is_approved = true
+      LEFT JOIN ballots b ON b.candidate_id = c.id AND b.election_id = p.election_id
+      WHERE p.election_id = $1
+      GROUP BY p.id, p.title, p.display_order, c.id, c.full_name
+      ORDER BY p.display_order, total_votes DESC
     `, [electionId]);
 
-    const doc = new PDFDocument({ margin: 50 });
+    // Group rows into positions, compute percentages and winners
+    const positions = {};
+    for (const row of results) {
+      if (!positions[row.position_id]) {
+        positions[row.position_id] = {
+          title: row.position,
+          displayOrder: row.display_order,
+          isYesNo: parseInt(row.position_candidate_count) === 1,
+          candidates: []
+        };
+      }
+      positions[row.position_id].candidates.push({
+        name: row.candidate,
+        totalVotes: row.total_votes,
+        yesVotes: row.yes_votes,
+        noVotes: row.no_votes
+      });
+    }
+
+    const orderedPositions = Object.values(positions).sort((a, b) => a.displayOrder - b.displayOrder);
+
+    orderedPositions.forEach(pos => {
+      if (pos.isYesNo) {
+        const c = pos.candidates[0];
+        const totalCast = c.yesVotes + c.noVotes;
+        c.percentage = totalCast > 0 ? ((c.yesVotes / totalCast) * 100).toFixed(0) : 0;
+        c.noPercentage = totalCast > 0 ? ((c.noVotes / totalCast) * 100).toFixed(0) : 0;
+        c.isWinner = c.yesVotes > c.noVotes && c.yesVotes > 0;
+      } else {
+        const totalVotes = pos.candidates.reduce((sum, c) => sum + c.totalVotes, 0);
+        const max = Math.max(...pos.candidates.map(c => c.totalVotes));
+        pos.candidates.forEach(c => {
+          c.percentage = totalVotes > 0 ? ((c.totalVotes / totalVotes) * 100).toFixed(0) : 0;
+          c.isWinner = c.totalVotes === max && max > 0;
+        });
+        // Keep the declared winner's line first, like the reference document
+        pos.candidates.sort((a, b) => b.totalVotes - a.totalVotes);
+      }
+    });
+
+    const doc = new PDFDocument({ margin: 60 });
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="election-results-${electionId}.pdf"`);
     doc.pipe(res);
 
-    doc.fontSize(20).text('DEPARTMENTAL SMART ELECTION SYSTEM', { align: 'center' });
-    doc.fontSize(16).text(election.title, { align: 'center' });
-    doc.fontSize(12).text(`Generated: ${new Date().toLocaleString()}`, { align: 'center' });
-    doc.moveDown(2);
+    const twoDigitYear = String(new Date(election.created_at).getFullYear()).slice(-2);
+    const { rows: [{ seq }] } = await pool.query(
+      `SELECT COUNT(*) as seq FROM elections
+       WHERE EXTRACT(YEAR FROM created_at) = EXTRACT(YEAR FROM $1::timestamp)
+       AND created_at <= $1`,
+      [election.created_at]
+    );
+    const refCode = `GESA/EC/${twoDigitYear}/${String(seq).padStart(3, '0')}`;
+    const declaredDate = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
-    let currentPosition = '';
-    for (const row of results) {
-      if (row.position !== currentPosition) {
-        doc.moveDown().fontSize(14).fillColor('#00aa55').text(row.position.toUpperCase());
-        currentPosition = row.position;
-        doc.fillColor('black');
-      }
-      const isYesNo = parseInt(row.position_candidate_count) === 1;
-      if (isYesNo) {
-        const elected = parseInt(row.yes_votes) > parseInt(row.no_votes);
-        doc.fontSize(11).text(
-          `  ${row.candidate} — YES: ${row.yes_votes} | NO: ${row.no_votes} — ${elected ? 'ELECTED ✓' : 'NOT ELECTED ✗'}`
-        );
-      } else {
-        doc.fontSize(11).text(`  ${row.candidate} — ${row.total_votes} votes`);
-      }
-    }
+    // ---- Header block ----
+    doc.fontSize(13).font('Helvetica-Bold').text('OFFICE OF THE ELECTORAL COMMISSION', { align: 'center' });
+    doc.moveDown(0.8);
+
+    const headerY = doc.y;
+    doc.fontSize(9).font('Helvetica').text(`Our Ref: ${refCode}`, 60, headerY);
+    doc.text(`Date: ${declaredDate}`, 0, headerY, { align: 'right' });
+    doc.moveDown(1);
+    doc.moveTo(60, doc.y).lineTo(doc.page.width - 60, doc.y).strokeColor('#999').stroke();
+    doc.moveDown(1);
+
+    // ---- Title ----
+    doc.fontSize(12).font('Helvetica-Bold').text('PROVISIONAL DECLARATION OF RESULTS', { align: 'center', underline: true });
+    doc.moveDown(0.8);
+    doc.fontSize(10).font('Helvetica').text(
+      `The Electoral Commission hereby announces the provisional results of the "${election.title}" election. ` +
+      `Following the successful conduct of the election and completion of the electronic voting process, the results are as follows:`,
+      { align: 'left' }
+    );
+    doc.moveDown(1.2);
+
+    // ---- Results by position ----
+    orderedPositions.forEach(pos => {
+      doc.fontSize(11).font('Helvetica-Bold').fillColor('black').text(pos.title);
+      doc.moveDown(0.2);
+
+      pos.candidates.forEach(c => {
+        if (pos.isYesNo) {
+          doc.fontSize(10).font('Helvetica')
+            .text(`${c.name} — YES: ${c.yesVotes} votes (${c.percentage}%) | NO: ${c.noVotes} votes (${c.noPercentage}%)${c.isWinner ? '  —  ELECTED' : ''}`);
+        } else {
+          doc.fontSize(10).font('Helvetica')
+            .text(`${c.name} — ${c.totalVotes} votes (${c.percentage}%)${c.isWinner ? '  —  ELECTED' : ''}`);
+        }
+      });
+      doc.moveDown(0.8);
+    });
+
+    // ---- Closing note ----
+    doc.moveDown(0.5);
+    doc.fontSize(9).font('Helvetica').text(
+      'The Electoral Commission extends its sincere appreciation to all candidates, students, election officials and observers ' +
+      'for their cooperation and commitment throughout the electoral process.',
+      { align: 'left' }
+    );
+    doc.moveDown(0.5);
+    doc.text(
+      'Please note that these are provisional results and remain subject to any valid petitions and verification procedures ' +
+      'in accordance with the Electoral Guidelines.',
+      { align: 'left' }
+    );
+    doc.moveDown(0.5);
+    doc.text('Congratulations to all candidates, and we thank the entire student community for a peaceful and successful election.');
+
+    // ---- Signature block ----
+    doc.moveDown(2.5);
+    doc.text('...............................Signed');
+    doc.moveDown(0.2);
+    doc.font('Helvetica-Bold').text('Election Committee');
 
     doc.end();
   } catch (err) {
