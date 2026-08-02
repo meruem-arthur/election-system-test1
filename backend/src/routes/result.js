@@ -95,7 +95,7 @@ router.get('/:electionId', async (req, res) => {
       ) c2 ON c2.position_id = p.id
       LEFT JOIN ballots b ON b.candidate_id = c.id AND b.election_id = p.election_id
       WHERE p.election_id = $1
-      GROUP BY p.id, p.title, p.display_order, c.id, c.full_name, c.image_url, c.program, c.level
+      GROUP BY p.id, p.title, p.display_order, c.id, c.full_name, c.image_url, c.program, c.level, c2.cnt
       ORDER BY p.display_order, total_votes DESC
     `, [electionId]);
 
@@ -233,7 +233,7 @@ router.get('/:electionId/pdf', async (req, res) => {
       ) c2 ON c2.position_id = p.id
       LEFT JOIN ballots b ON b.candidate_id = c.id AND b.election_id = p.election_id
       WHERE p.election_id = $1
-      GROUP BY p.id, p.title, p.display_order, c.id, c.full_name
+      GROUP BY p.id, p.title, p.display_order, c.id, c.full_name, c2.cnt
       ORDER BY p.display_order, total_votes DESC
     `, [electionId]);
 
