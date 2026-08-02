@@ -87,10 +87,12 @@ router.get('/:electionId', async (req, res) => {
         COUNT(b.id) FILTER (WHERE b.ballot_token NOT LIKE 'NO_%')::integer as yes_votes,
         COUNT(b.id) FILTER (WHERE b.ballot_token LIKE 'NO_%')::integer as no_votes,
         -- Count candidates in this position to detect yes/no positions
-        COUNT(DISTINCT c2.id) as position_candidate_count
+        COALESCE(c2.cnt, 0) as position_candidate_count
       FROM positions p
       JOIN candidates c ON c.position_id = p.id AND c.election_id = p.election_id AND c.is_approved = true
-      LEFT JOIN candidates c2 ON c2.position_id = p.id AND c2.election_id = p.election_id AND c2.is_approved = true
+      LEFT JOIN (
+        SELECT position_id, COUNT(*) as cnt FROM candidates WHERE is_approved = true GROUP BY position_id
+      ) c2 ON c2.position_id = p.id
       LEFT JOIN ballots b ON b.candidate_id = c.id AND b.election_id = p.election_id
       WHERE p.election_id = $1
       GROUP BY p.id, p.title, p.display_order, c.id, c.full_name, c.image_url, c.program, c.level
@@ -223,10 +225,12 @@ router.get('/:electionId/pdf', async (req, res) => {
         COUNT(b.id)::integer as total_votes,
         COUNT(b.id) FILTER (WHERE b.ballot_token NOT LIKE 'NO_%')::integer as yes_votes,
         COUNT(b.id) FILTER (WHERE b.ballot_token LIKE 'NO_%')::integer as no_votes,
-        COUNT(DISTINCT c2.id) as position_candidate_count
+        COALESCE(c2.cnt, 0) as position_candidate_count
       FROM positions p
       JOIN candidates c ON c.position_id = p.id AND c.election_id = p.election_id AND c.is_approved = true
-      LEFT JOIN candidates c2 ON c2.position_id = p.id AND c2.election_id = p.election_id AND c2.is_approved = true
+      LEFT JOIN (
+        SELECT position_id, COUNT(*) as cnt FROM candidates WHERE is_approved = true GROUP BY position_id
+      ) c2 ON c2.position_id = p.id
       LEFT JOIN ballots b ON b.candidate_id = c.id AND b.election_id = p.election_id
       WHERE p.election_id = $1
       GROUP BY p.id, p.title, p.display_order, c.id, c.full_name
