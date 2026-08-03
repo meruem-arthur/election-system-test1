@@ -147,13 +147,6 @@ export default function StudentLoginPage() {
           </p>
         </div>
 
-        {/* Admin link */}
-        <p className="text-center mt-6 text-xs text-dark-700">
-          <Link href="/admin/login" className="hover:text-primary-500 transition-colors">
-            Administration Portal →
-          </Link>
-        </p>
-
         {/* Developer credit */}
         <p className="text-center mt-4 text-xs" style={{ color: '#333' }}>
           Developed by{' '}

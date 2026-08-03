@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { adminAPI } from '@/lib/api';
 import toast from 'react-hot-toast';
-import { Plus, X, Calendar, Play, Square, Eye, ChevronRight, Trash2 } from 'lucide-react';
+import { Plus, X, Calendar, Play, Square, Eye, ChevronRight, Trash2, Pencil } from 'lucide-react';
 import AdminLayout from '@/components/AdminLayout';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
@@ -19,6 +19,9 @@ export default function AdminElectionsPage() {
     academicYear: '', startTime: '', endTime: ''
   });
   const [submitting, setSubmitting] = useState(false);
+  const [editingElection, setEditingElection] = useState<any>(null);
+  const [editForm, setEditForm] = useState({ title: '', description: '', startTime: '', endTime: '' });
+  const [editSubmitting, setEditSubmitting] = useState(false);
   const [admin, setAdmin] = useState<any>(null);
 
   useEffect(() => {
@@ -48,6 +51,33 @@ export default function AdminElectionsPage() {
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Failed to create election');
     } finally { setSubmitting(false); }
+  };
+
+  // datetime-local inputs need "yyyy-MM-ddTHH:mm" — trims the ISO string down to that
+  const toLocalInputValue = (iso: string | null) => (iso ? iso.slice(0, 16) : '');
+
+  const openEdit = (election: any) => {
+    setEditingElection(election);
+    setEditForm({
+      title: election.title || '',
+      description: election.description || '',
+      startTime: toLocalInputValue(election.start_time),
+      endTime: toLocalInputValue(election.end_time)
+    });
+  };
+
+  const submitEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingElection) return;
+    setEditSubmitting(true);
+    try {
+      await adminAPI.updateElection(editingElection.id, editForm);
+      toast.success('Election updated');
+      setEditingElection(null);
+      loadElections();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to update election');
+    } finally { setEditSubmitting(false); }
   };
 
   const updateStatus = async (id: string, status: string) => {
@@ -151,9 +181,14 @@ export default function AdminElectionsPage() {
 
                 <div className="flex items-center gap-2 flex-wrap">
                   {e.status === 'draft' && (
-                    <button onClick={() => updateStatus(e.id, 'active')} className="btn-primary py-2 px-3 text-xs">
-                      <Play className="w-3 h-3" /> Start
-                    </button>
+                    <>
+                      <button onClick={() => openEdit(e)} className="btn-secondary py-2 px-3 text-xs">
+                        <Pencil className="w-3 h-3" /> Edit
+                      </button>
+                      <button onClick={() => updateStatus(e.id, 'active')} className="btn-primary py-2 px-3 text-xs">
+                        <Play className="w-3 h-3" /> Start
+                      </button>
+                    </>
                   )}
                   {e.status === 'active' && (
                     <button onClick={() => updateStatus(e.id, 'ended')} className="btn-danger py-2 px-3 text-xs">
@@ -311,6 +346,59 @@ export default function AdminElectionsPage() {
                 <button type="button" onClick={() => setShowCreate(false)} className="btn-secondary flex-1">Cancel</button>
                 <button type="submit" disabled={submitting} className="btn-primary flex-1">
                   {submitting ? <div className="spinner" /> : 'Create Election'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* Edit Election Modal — draft only */}
+      {editingElection && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/70" onClick={() => setEditingElection(null)} />
+          <div className="relative card-glow p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="font-bold text-white text-lg">Edit Election</h3>
+              <button onClick={() => setEditingElection(null)} className="p-1 text-dark-700 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={submitEdit} className="space-y-4">
+              <div>
+                <label className="label">Election Title *</label>
+                <input className="input" placeholder="e.g. 2024/2025 SRC Elections"
+                  value={editForm.title} onChange={e => setEditForm(f => ({ ...f, title: e.target.value }))} required />
+              </div>
+
+              <div>
+                <label className="label">Description</label>
+                <textarea className="input" rows={2} placeholder="Optional election description"
+                  value={editForm.description} onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))} />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">Start Date & Time</label>
+                  <input type="datetime-local" className="input text-sm"
+                    value={editForm.startTime} onChange={e => setEditForm(f => ({ ...f, startTime: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="label">End Date & Time</label>
+                  <input type="datetime-local" className="input text-sm"
+                    value={editForm.endTime} onChange={e => setEditForm(f => ({ ...f, endTime: e.target.value }))} />
+                </div>
+              </div>
+
+              <div className="rounded-xl p-3 text-xs text-dark-700"
+                style={{ background: 'rgba(180,79,255,0.05)', border: '1px solid rgba(180,79,255,0.1)' }}>
+                Department and academic year can't be changed after creation. Editing is only available while the election is in <strong className="text-white">Draft</strong> status.
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => setEditingElection(null)} className="btn-secondary flex-1">Cancel</button>
+                <button type="submit" disabled={editSubmitting} className="btn-primary flex-1">
+                  {editSubmitting ? <div className="spinner" /> : 'Save Changes'}
                 </button>
               </div>
             </form>

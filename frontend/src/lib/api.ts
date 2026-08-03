@@ -83,6 +83,9 @@ export const adminAPI = {
 
   createElection: (data: any) => api.post('/admin/elections', data),
 
+  updateElection: (id: string, data: any) =>
+    api.patch(`/admin/elections/${id}`, data),
+
   updateElectionStatus: (id: string, status: string) =>
     api.patch(`/admin/elections/${id}/status`, { status }),
 

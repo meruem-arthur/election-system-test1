@@ -131,6 +131,60 @@ router.post('/elections', requireRole('super_admin'), async (req, res) => {
   }
 });
 
+// Edit election details — only permitted while the election is still in draft.
+// Once an election has been started (or is in any other status), its identity
+// and timing are locked to keep the audit trail and ballots consistent.
+router.patch('/elections/:id', requireRole('super_admin', 'election_admin'), requireElectionAccess('id'), async (req, res) => {
+  const { id } = req.params;
+  const { title, description, startTime, endTime } = req.body;
+
+  try {
+    const { rows: existingRows } = await pool.query('SELECT * FROM elections WHERE id = $1', [id]);
+    const existing = existingRows[0];
+    if (!existing) return res.status(404).json({ error: 'Election not found' });
+
+    if (existing.status !== 'draft') {
+      return res.status(400).json({ error: 'Only draft elections can be edited. Stop or reset the election to draft first.' });
+    }
+
+    const updates = {};
+    if (title !== undefined) {
+      if (!title.trim()) return res.status(400).json({ error: 'Title cannot be empty' });
+      updates.title = title;
+    }
+    if (description !== undefined) updates.description = description;
+    if (startTime !== undefined) updates.start_time = startTime;
+    if (endTime !== undefined) updates.end_time = endTime;
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: 'No editable fields provided' });
+    }
+
+    const setClause = Object.keys(updates).map((k, i) => `${k} = $${i + 2}`).join(', ');
+    const values = [id, ...Object.values(updates)];
+
+    const { rows } = await pool.query(
+      `UPDATE elections SET ${setClause}, updated_at = NOW() WHERE id = $1 RETURNING *`,
+      values
+    );
+
+    await auditService.log({
+      action: 'election_updated',
+      actorType: 'admin',
+      actorId: req.admin.id,
+      actorEmail: req.admin.email,
+      electionId: id,
+      metadata: { changedFields: Object.keys(updates), previous: { title: existing.title, start_time: existing.start_time, end_time: existing.end_time } },
+      ip: req.ip
+    });
+
+    res.json(rows[0]);
+  } catch (err) {
+    logger.error('Edit election error:', err);
+    res.status(500).json({ error: 'Failed to update election' });
+  }
+});
+
 router.patch('/elections/:id/status', requireRole('super_admin', 'election_admin'), requireElectionAccess('id'), async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
