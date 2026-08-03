@@ -68,7 +68,7 @@ CREATE TABLE students (
   election_id UUID REFERENCES elections(id) ON DELETE CASCADE NOT NULL,
   full_name VARCHAR(255) NOT NULL,
   surname VARCHAR(255) NOT NULL,
-  index_number VARCHAR(100) UNIQUE NOT NULL,
+  index_number VARCHAR(100) UNIQUE,
   reference_number VARCHAR(50) UNIQUE NOT NULL,
   level VARCHAR(20) NOT NULL,
   department VARCHAR(255) NOT NULL,

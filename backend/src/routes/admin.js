@@ -253,7 +253,8 @@ router.post('/elections/:electionId/students/upload', requireRole('super_admin',
 
       const fullName = row['Full Name'] || row['full_name'] || row['FullName'] || '';
       const surname = row['Surname'] || row['surname'] || row['Last Name'] || '';
-      const indexNumber = row['Index Number'] || row['index_number'] || row['IndexNumber'] || '';
+      const indexNumberRaw = row['Index Number'] || row['index_number'] || row['IndexNumber'] || '';
+      const indexNumber = indexNumberRaw.trim() ? indexNumberRaw.trim() : null;
       const referenceNumber = row['Reference Number'] || row['reference_number'] || row['ReferenceNumber'] || '';
       const level = row['Level'] || row['level'] || '';
       const department = row['Department'] || row['department'] || '';
@@ -261,7 +262,7 @@ router.post('/elections/:electionId/students/upload', requireRole('super_admin',
       const phone = row['Phone Number'] || row['phone'] || row['Phone'] || null;
       const email = row['School Email'] || row['Email'] || row['email'] || null;
 
-      if (!fullName || !surname || !indexNumber || !referenceNumber || !level || !department || !program) {
+      if (!fullName || !surname || !referenceNumber || !level || !department || !program) {
         errors.push({ row: rowNum, error: 'Missing required fields', data: row });
         continue;
       }
