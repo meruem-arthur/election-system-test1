@@ -4,7 +4,7 @@ import { adminAPI, credentialDispatchAPI } from '@/lib/api';
 import toast from 'react-hot-toast';
 import {
   Send, RefreshCw, Mail, MessageSquare, AlertTriangle,
-  CheckCircle2, Clock, Ban, RotateCcw
+  CheckCircle2, Clock, Ban, RotateCcw, Search
 } from 'lucide-react';
 import AdminLayout from '@/components/AdminLayout';
 
@@ -59,6 +59,7 @@ export default function AdminCredentialsPage() {
   const [resending, setResending] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<'all' | 'pending' | 'failed' | 'delivered' | 'blocked'>('all');
+  const [search, setSearch] = useState('');
   const [confirmSend, setConfirmSend] = useState(false);
 
   const selectedElectionRef = useRef('');
@@ -120,6 +121,10 @@ export default function AdminCredentialsPage() {
       return !s.blocked_no_contact && resolved && anySent && !(anyFailed && !anySent);
     }
     return true;
+  }).filter(s => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return s.full_name.toLowerCase().includes(q) || s.reference_number.toLowerCase().includes(q);
   });
 
   const toggleSelectAllFiltered = () => {
@@ -252,11 +257,21 @@ export default function AdminCredentialsPage() {
       )}
 
       {/* Stats bar */}
-      <div className="flex items-center justify-between gap-2 mb-4">
-        <div className="flex items-center gap-2 text-sm text-dark-700">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div className="flex items-center gap-3 flex-1 min-w-0">
           {selected.size > 0 && (
-            <span className="text-primary-500 font-medium">{selected.size} selected</span>
+            <span className="text-sm text-primary-500 font-medium whitespace-nowrap">{selected.size} selected</span>
           )}
+          <div className="relative flex-1 max-w-xs">
+            <Search className="w-3.5 h-3.5 text-dark-700 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search by name or reference no."
+              className="input pl-9 py-1.5 text-xs w-full"
+            />
+          </div>
         </div>
         <button
           onClick={() => loadStatus()}
@@ -291,7 +306,7 @@ export default function AdminCredentialsPage() {
               {loading ? (
                 <tr><td colSpan={7} className="text-center py-12 text-dark-700">Loading...</td></tr>
               ) : filteredStudents.length === 0 ? (
-                <tr><td colSpan={7} className="text-center py-12 text-dark-700">No records found</td></tr>
+                <tr><td colSpan={7} className="text-center py-12 text-dark-700">{search.trim() ? `No students matching "${search}"` : 'No records found'}</td></tr>
               ) : filteredStudents.map(s => (
                 <tr key={s.id}>
                   <td>
